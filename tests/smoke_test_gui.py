@@ -32,6 +32,10 @@ def run_smoke_test():
     
     # Check proxy via the button (simulated)
     print("Checking proxy...")
+    from PySide6.QtWidgets import QMessageBox
+    QMessageBox.information = lambda *args, **kwargs: print(f"MOCK info: {args}")
+    QMessageBox.warning = lambda *args, **kwargs: print(f"MOCK warning: {args}")
+    QMessageBox.critical = lambda *args, **kwargs: print(f"MOCK critical: {args}")
     window.check_proxy()
     
     print("Stopping process...")

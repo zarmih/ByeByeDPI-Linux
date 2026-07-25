@@ -6,4 +6,17 @@ if [ ! -d ".venv" ]; then
 fi
 source .venv/bin/activate
 export PYTHONPATH="$(pwd)/src:$PYTHONPATH"
-python src/main.py "$@"
+
+if python3 -c "import PySide6" &> /dev/null; then
+    echo "Using PySide6 frontend"
+    python3 src/main.py "$@"
+elif /usr/bin/python3 -c "import gi; gi.require_version('Gtk', '3.0')" &> /dev/null; then
+    echo "Using GTK3 frontend (system python)"
+    /usr/bin/python3 src/main_gtk.py "$@"
+elif python3 -c "import tkinter" &> /dev/null; then
+    echo "Using Tkinter frontend"
+    python3 src/main_tk.py "$@"
+else
+    echo "No GUI backend found! Please install PySide6, GTK3, or Tkinter."
+    exit 1
+fi

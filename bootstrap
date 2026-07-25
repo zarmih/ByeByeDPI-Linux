@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e
+export http_proxy=http://127.0.0.1:10808 https_proxy=http://127.0.0.1:10808
+
+if ! command -v uv &> /dev/null; then
+    echo "uv is not installed. Please install uv or make it available in PATH."
+    exit 1
+fi
+
+echo "Setting up virtual environment with uv..."
+if [ ! -d ".venv" ]; then
+    uv venv
+fi
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+echo "Bootstrap complete! Run ./dev-run to start the application."

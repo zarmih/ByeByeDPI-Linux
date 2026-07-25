@@ -4,7 +4,9 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QMessageBox
 )
-from PySide6.QtCore import Qt, QThread, Signal, Slot
+from PySide6.QtCore import Qt, Signal, Slot
+import socket
+import shlex
 
 from process_manager import ProcessManager
 
@@ -75,6 +77,11 @@ class MainWindow(QMainWindow):
         self.status_label = QLabel("Status: Stopped")
         self.status_label.setStyleSheet("color: gray; font-weight: bold;")
         controls_layout.addWidget(self.status_label)
+        
+        self.check_proxy_btn = QPushButton("Check Proxy")
+        self.check_proxy_btn.clicked.connect(self.check_proxy)
+        controls_layout.addWidget(self.check_proxy_btn)
+        
         controls_layout.addStretch()
 
         layout.addLayout(controls_layout)
@@ -103,14 +110,37 @@ class MainWindow(QMainWindow):
         if self.pm.start(args):
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
-            self.status_label.setText("Status: Running (SOCKS5 usually at 127.0.0.1:1080)")
+            self.status_label.setText("Status: Running")
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
             self.profile_combo.setEnabled(False)
             self.args_input.setEnabled(False)
+        else:
+            QMessageBox.warning(self, "Error", "Failed to start process or open port.")
 
     def stop_process(self):
         self.stop_btn.setEnabled(False) # Disable to prevent multiple clicks
         self.pm.stop()
+
+    def check_proxy(self):
+        args = self.args_input.text().strip()
+        try:
+            args_list = shlex.split(args)
+        except:
+            args_list = []
+        
+        port = 1080
+        for i, arg in enumerate(args_list):
+            if arg in ('-p', '--port') and i + 1 < len(args_list):
+                try:
+                    port = int(args_list[i+1])
+                except ValueError:
+                    pass
+
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=1.0):
+                QMessageBox.information(self, "Proxy Check", f"Proxy is reachable at 127.0.0.1:{port}")
+        except OSError:
+            QMessageBox.warning(self, "Proxy Check", f"Proxy is NOT reachable at 127.0.0.1:{port}")
 
     def _on_process_output(self, text: str):
         self.append_log_signal.emit(text)

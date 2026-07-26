@@ -34,7 +34,11 @@ APP_DIR="$PREFIX/share/byebyedpi-linux"
 LAUNCHER="$PREFIX/bin/byebyedpi-linux"
 DESKTOP_FILE="$PREFIX/share/applications/byebyedpi.desktop"
 ICON_FILE="$PREFIX/share/icons/hicolor/128x128/apps/byebyedpi.png"
-USER_DATA_DIR="${HOME}/.local/share/ByeByeDPI-Linux"
+XDG_DATA_ROOT="${XDG_DATA_HOME:-${HOME}/.local/share}"
+USER_DATA_DIR="$XDG_DATA_ROOT/ByeByeDPI-Linux"
+LEGACY_DATA_DIR_1="$XDG_DATA_ROOT/ByeByeDPI/ByeByeDPI-Linux"
+LEGACY_DATA_DIR_2="$XDG_DATA_ROOT/ByeByeDPI/ByeByeDPI-Linux/ByeByeDPI-Linux"
+LEGACY_DATA_DIR_3="$XDG_DATA_ROOT/ByeByeDPI-Linux/ByeByeDPI-Linux"
 
 if [ "$DRY_RUN" -eq 1 ]; then
     echo "[DRY-RUN] Would recover a pending GNOME proxy journal using $APP_DIR"
@@ -43,7 +47,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
     echo "[DRY-RUN] Would remove $DESKTOP_FILE"
     echo "[DRY-RUN] Would remove $ICON_FILE"
     if [ "$PURGE_DATA" -eq 1 ]; then
-        echo "[DRY-RUN] Would purge $USER_DATA_DIR"
+        echo "[DRY-RUN] Would purge known ByeByeDPI data paths under $XDG_DATA_ROOT"
     fi
     exit 0
 fi
@@ -68,10 +72,26 @@ rm -rf -- "$APP_DIR"
 rm -f -- "$LAUNCHER" "$DESKTOP_FILE" "$ICON_FILE"
 
 if [ "$PURGE_DATA" -eq 1 ]; then
-    case "$USER_DATA_DIR" in
-        "$HOME"/.local/share/ByeByeDPI-Linux) rm -rf -- "$USER_DATA_DIR" ;;
-        *) echo "Error: refusing unsafe data path: $USER_DATA_DIR" >&2; exit 2 ;;
-    esac
+    DATA_PATHS=(
+        "$USER_DATA_DIR"
+        "$LEGACY_DATA_DIR_1"
+        "$LEGACY_DATA_DIR_2"
+        "$LEGACY_DATA_DIR_3"
+    )
+    for data_path in "${DATA_PATHS[@]}"; do
+        safe_path=0
+        for allowed_path in "${DATA_PATHS[@]}"; do
+            if [ "$data_path" = "$allowed_path" ]; then
+                safe_path=1
+                break
+            fi
+        done
+        if [ "$safe_path" -ne 1 ]; then
+            echo "Error: refusing unsafe data path: $data_path" >&2
+            exit 2
+        fi
+        rm -rf -- "$data_path"
+    done
 fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then

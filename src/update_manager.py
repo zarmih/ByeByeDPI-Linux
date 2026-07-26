@@ -6,14 +6,15 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Iterable, Mapping
+from typing import Callable, Mapping
+
+from paths import user_data_dir
 
 
 UPSTREAM_REPO = "romanvht/ByeByeDPI"
@@ -160,8 +161,7 @@ def _atomic_write(path: Path, payload: bytes) -> None:
 
 
 def _default_backup_dir() -> Path:
-    base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    return base / "ByeByeDPI-Linux" / "updates" / "backups"
+    return user_data_dir() / "updates" / "backups"
 
 
 class UpdateManager:

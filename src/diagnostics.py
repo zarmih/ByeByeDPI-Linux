@@ -7,7 +7,7 @@ import subprocess
 from pathlib import Path
 
 import PySide6
-from PySide6.QtCore import QStandardPaths
+from paths import user_config_dir, user_data_dir
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -132,8 +132,8 @@ class DiagnosticsDialog(QDialog):
         else:
             add("FAIL", f"Invalid local port: {port}")
 
-        data_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
-        config_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppConfigLocation))
+        data_dir = user_data_dir(create=False)
+        config_dir = user_config_dir(create=False)
         for label, directory in (("data directory", data_dir), ("config directory", config_dir)):
             if self._writable_location(directory):
                 add("OK", f"Writable {label}: {self._redact_path(directory)}")

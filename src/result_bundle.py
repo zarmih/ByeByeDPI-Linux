@@ -4,10 +4,11 @@ import csv
 import time
 import datetime
 import statistics
+import tempfile
 import shutil
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
-from PySide6.QtCore import QStandardPaths
+from paths import data_search_dirs
 
 SCHEMA_VERSION = 2
 APP_VERSION = "1.0.0"
@@ -19,20 +20,40 @@ MAX_STRING_LENGTH = 16384
 ALLOWED_STATES = {"completed", "cancelled", "partial", "imported", "imported_v1", "paused"}
 ALLOWED_RESULT_STATUSES = {"Success", "Failed", "Fail", "Timeout", "Error"}
 
-def get_history_dir(test_path=None):
+def _history_dirs(test_path=None):
     if test_path:
-        d = test_path
-    else:
-        app_data = QStandardPaths.writableLocation(QStandardPaths.AppDataLocation)
-        d = os.path.join(app_data, "ByeByeDPI-Linux", "history")
-    os.makedirs(d, exist_ok=True)
-    return d
+        return (Path(test_path),)
+    return tuple(directory / "history" for directory in data_search_dirs())
+
+
+def get_history_dir(test_path=None):
+    directory = _history_dirs(test_path)[0]
+    directory.mkdir(parents=True, exist_ok=True)
+    return str(directory)
 
 def _atomic_write_json(filepath, data):
-    tmp_path = filepath + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp_path, filepath)
+    destination = Path(filepath)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(
+        prefix=f".{destination.name}.",
+        suffix=".tmp",
+        dir=str(destination.parent),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temp_name, destination)
+        directory_fd = os.open(destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    finally:
+        if os.path.exists(temp_name):
+            os.unlink(temp_name)
 
 def save_bundle(filepath, bundle):
     """Atomically write a sanitized result bundle."""
@@ -344,44 +365,62 @@ def save_to_history(bundle, test_path=None):
         oldest = files.pop(0)
         try:
             os.remove(oldest)
-        except:
+        except OSError:
             pass
 
 def list_history(test_path=None):
-    d = get_history_dir(test_path)
     records = []
-    for f in os.listdir(d):
-        if f.endswith(".json") and f.startswith("run_"):
-            filepath = os.path.join(d, f)
+    seen = set()
+    for directory in _history_dirs(test_path):
+        if not directory.is_dir():
+            continue
+        for filepath in directory.glob("run_*.json"):
             try:
-                bundle, _ = load_bundle(filepath)
+                resolved = filepath.resolve(strict=True)
+                if resolved in seen:
+                    continue
+                bundle, _ = load_bundle(resolved)
                 records.append({
-                    "filepath": filepath,
+                    "filepath": str(resolved),
                     "created_at": bundle.get("created_at", ""),
                     "state": bundle.get("run_metadata", {}).get("state", "unknown"),
                     "strategies": bundle.get("run_metadata", {}).get("selected_strategy_count", 0),
                     "targets": bundle.get("run_metadata", {}).get("selected_target_count", 0),
                     "best_strategy_id": bundle.get("best_strategy_id", ""),
-                    "mtime": os.path.getmtime(filepath)
+                    "mtime": resolved.stat().st_mtime,
                 })
-            except:
-                pass
-    records.sort(key=lambda x: x["mtime"], reverse=True)
+                seen.add(resolved)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+    records.sort(key=lambda item: item["mtime"], reverse=True)
     return records
 
+
+def _validate_history_path(filepath, test_path=None):
+    candidate = Path(filepath).resolve(strict=False)
+    for directory in _history_dirs(test_path):
+        root = directory.resolve(strict=False)
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            continue
+        if candidate.name.startswith("run_") and candidate.suffix == ".json":
+            return candidate
+    raise ValueError("Path traversal attempt.")
+
+
 def delete_history_record(filepath, test_path=None):
-    d = os.path.abspath(get_history_dir(test_path))
-    fp = os.path.abspath(filepath)
-    if os.path.commonpath([d, fp]) != d:
-        raise ValueError("Path traversal attempt.")
-    if os.path.exists(fp):
-        os.remove(fp)
+    candidate = _validate_history_path(filepath, test_path)
+    if candidate.exists():
+        candidate.unlink()
+
 
 def clear_history(test_path=None):
-    d = get_history_dir(test_path)
-    for f in os.listdir(d):
-        if f.endswith(".json") and f.startswith("run_"):
-            os.remove(os.path.join(d, f))
+    for directory in _history_dirs(test_path):
+        if not directory.is_dir():
+            continue
+        for filepath in directory.glob("run_*.json"):
+            _validate_history_path(filepath, test_path).unlink()
 
 def compare_bundles(b1, b2):
     comp = []

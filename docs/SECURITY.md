@@ -29,3 +29,9 @@ Automated tests inject a fake `gsettings` runner. They do not execute real `gset
 The update center retrieves the current full Git commit first and then downloads every asset from that immutable SHA. Responses are size-limited, decoded as UTF-8 and validated before the Apply button is enabled. Strategy text remains data: previewing or installing it never starts `ciadpi`.
 
 Update proxy URLs may use only `http` or `https`, must contain no credentials, query, or fragment, and are stored only after validation. Active JSON files are replaced atomically after a validated backup is written. Rollback accepts only validated files inside the application backup directory.
+
+## Deterministic user data paths
+
+Runtime state uses `QStandardPaths.GenericDataLocation/ByeByeDPI-Linux`, independent of Qt organization/application naming. On Linux this is normally `$XDG_DATA_HOME/ByeByeDPI-Linux` or `~/.local/share/ByeByeDPI-Linux`. The GNOME journal, test history and update backups therefore share one root and the standalone uninstaller can recover the same journal as the GUI.
+
+Known directories created by earlier AppDataLocation-based builds are searched only for recovery/history compatibility. If more than one GNOME recovery journal exists, automatic restoration stops instead of guessing which snapshot is authoritative.

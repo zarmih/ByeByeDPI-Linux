@@ -9,10 +9,9 @@ import tempfile
 from pathlib import Path
 from typing import Callable, Mapping
 
-from PySide6.QtCore import QStandardPaths
+from paths import data_search_dirs, user_data_dir
 
 
-APP_DATA_NAME = "ByeByeDPI-Linux"
 JOURNAL_VERSION = 1
 MAX_JOURNAL_BYTES = 1024 * 1024
 
@@ -57,9 +56,17 @@ class GnomeProxyAdapter:
         self.gsettings_path = gsettings_path or shutil.which("gsettings")
         self.last_error = ""
 
-        app_dir = Path(data_dir) if data_dir is not None else self._default_data_dir()
+        if data_dir is not None:
+            app_dir = Path(data_dir)
+            journal_dirs = (app_dir,)
+        else:
+            app_dir = user_data_dir()
+            journal_dirs = data_search_dirs()
         app_dir.mkdir(parents=True, exist_ok=True)
         self.journal_file = str(app_dir / "gnome_proxy_journal.json")
+        self._journal_candidates = tuple(
+            directory / "gnome_proxy_journal.json" for directory in journal_dirs
+        )
 
         self._available_keys = (
             {schema: set(keys) for schema, keys in available_keys.items()}
@@ -73,13 +80,6 @@ class GnomeProxyAdapter:
             and {"host", "port"}.issubset(required)
             and "mode" in root_keys
         )
-
-    @staticmethod
-    def _default_data_dir() -> Path:
-        base = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
-        if base.name.casefold() != APP_DATA_NAME.casefold():
-            base /= APP_DATA_NAME
-        return base
 
     def _run(self, argv: list[str]) -> subprocess.CompletedProcess[str]:
         try:
@@ -116,8 +116,11 @@ class GnomeProxyAdapter:
     def is_available(self) -> bool:
         return self.enabled
 
+    def _existing_journal_paths(self) -> tuple[Path, ...]:
+        return tuple(candidate for candidate in self._journal_candidates if candidate.is_file())
+
     def has_journal(self) -> bool:
-        return os.path.isfile(self.journal_file)
+        return bool(self._existing_journal_paths())
 
     def _iter_supported_settings(self):
         for schema, wanted_keys in PROXY_KEYS.items():
@@ -166,10 +169,17 @@ class GnomeProxyAdapter:
             if os.path.exists(temp_name):
                 os.unlink(temp_name)
 
-    def _load_journal(self) -> dict:
-        path = Path(self.journal_file)
-        if not path.is_file():
+    def _load_journal(self) -> tuple[dict, Path]:
+        paths = self._existing_journal_paths()
+        if not paths:
             raise ProxyIntegrationError("GNOME proxy recovery journal does not exist")
+        if len(paths) > 1:
+            locations = ", ".join(str(path) for path in paths)
+            raise ProxyIntegrationError(
+                "Multiple GNOME proxy recovery journals were found; "
+                f"automatic recovery is unsafe: {locations}"
+            )
+        path = paths[0]
         if path.stat().st_size > MAX_JOURNAL_BYTES:
             raise ProxyIntegrationError("GNOME proxy recovery journal is too large")
         try:
@@ -186,7 +196,7 @@ class GnomeProxyAdapter:
             for key, value in values.items():
                 if key not in PROXY_KEYS[schema] or not isinstance(value, str):
                     raise ProxyIntegrationError("Malformed GNOME proxy setting value")
-        return payload
+        return payload, path
 
     def apply_proxy(self, port: int = 1080) -> bool:
         self.last_error = ""
@@ -248,7 +258,7 @@ class GnomeProxyAdapter:
             self.last_error = "gsettings is unavailable; recovery journal was retained"
             return False
         try:
-            payload = self._load_journal()
+            payload, journal_path = self._load_journal()
             settings: dict[str, dict[str, str]] = payload["settings"]
             # Restore child schemas first, global mode last.
             ordered_schemas = [s for s in settings if s != "org.gnome.system.proxy"]
@@ -260,7 +270,7 @@ class GnomeProxyAdapter:
                     items.sort(key=lambda item: item[0] == "mode")
                 for key, value in items:
                     self._set_setting(schema, key, value)
-            os.unlink(self.journal_file)
+            os.unlink(journal_path)
             return True
         except (OSError, ProxyIntegrationError) as exc:
             self.last_error = str(exc)

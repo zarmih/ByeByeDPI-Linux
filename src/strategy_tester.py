@@ -44,16 +44,20 @@ class StrategyTesterThread(QThread):
         start_time = time.time()
         
         # We use curl with SOCKS5, similar to Android's connection logic.
-        # Android fetches up to 1MB of body to verify no RST occurs mid-stream.
-        # We use -L to follow redirects and -o /dev/null to discard body, 
-        # which effectively reads the stream to ensure it doesn't break.
-        # SOCKS5-hostname is required to resolve DNS through the proxy.
+        # Android (SiteCheckUtils.kt) policy:
+        # 1. Method: GET (openConnection), Follow redirects = true.
+        # 2. Timeout: connect/read timeout applied.
+        # 3. Headers: Connection: close. (No custom User-Agent).
+        # 4. Success: Any HTTP status code is accepted as long as the TLS handshake 
+        #    and stream read complete up to Content-Length (or 1MB).
+        # We use -L (redirects), --connect-timeout 5, -H "Connection: close".
+        # We rely on subprocess timeout=10 to bound total execution.
+        # A curl exit code 0 means full transfer (matches Android actualLength >= declaredLength).
         curl_cmd = [
             "curl", "-s", "-L", "-o", "/dev/null", "-w", "%{http_code}",
             "--socks5-hostname", f"127.0.0.1:{port}",
-            "--max-time", "5",
-            "--connect-timeout", "3",
-            "-A", "Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.0.0 Mobile Safari/537.36",
+            "--connect-timeout", "5",
+            "-H", "Connection: close",
             url
         ]
         

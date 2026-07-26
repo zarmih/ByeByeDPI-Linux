@@ -23,3 +23,9 @@ A second Apply is refused while a journal exists. Stop, Quit and application sta
 ## Tests and privileges
 
 Automated tests inject a fake `gsettings` runner. They do not execute real `gsettings set` commands. Installation and uninstallation scripts reject unsafe prefixes and do not invoke `sudo`.
+
+## Upstream update safety
+
+The update center retrieves the current full Git commit first and then downloads every asset from that immutable SHA. Responses are size-limited, decoded as UTF-8 and validated before the Apply button is enabled. Strategy text remains data: previewing or installing it never starts `ciadpi`.
+
+Update proxy URLs may use only `http` or `https`, must contain no credentials, query, or fragment, and are stored only after validation. Active JSON files are replaced atomically after a validated backup is written. Rollback accepts only validated files inside the application backup directory.

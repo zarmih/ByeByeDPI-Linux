@@ -197,6 +197,9 @@ class StrategiesDialog(QDialog):
         self._restore_dialog_settings()
 
     def load_data(self):
+        self.strategies = []
+        self.target_groups = []
+        self.targets_dict = {}
         if os.path.exists(self.strategies_file):
             try:
                 with open(self.strategies_file, 'r', encoding='utf-8') as f:
@@ -324,6 +327,10 @@ class StrategiesDialog(QDialog):
         self.btn_history = QPushButton("History")
         self.btn_history.clicked.connect(self.open_history)
         btn_layout.addWidget(self.btn_history)
+
+        self.btn_updates = QPushButton("Updates…")
+        self.btn_updates.clicked.connect(self.open_update_center)
+        btn_layout.addWidget(self.btn_updates)
 
         self.chk_autosave = QCheckBox("Auto-save History")
         self.chk_autosave.setChecked(
@@ -632,6 +639,35 @@ class StrategiesDialog(QDialog):
         except Exception as e:
             print(f"History save failed: {e}")
 
+
+    def open_update_center(self):
+        if self.tester_thread is not None:
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(
+                    self,
+                    "Test in Progress",
+                    "Stop the current strategy test before updating data files.",
+                )
+            return
+        from update_dialog import UpdateDialog
+
+        dialog = UpdateDialog(os.path.join(self.base_dir, "data"), self)
+        dialog.data_updated.connect(self.reload_updated_data)
+        dialog.exec()
+
+    def reload_updated_data(self, _kind=None):
+        selected_ids = {
+            target["target_id"] for target in self.get_selected_targets()
+        }
+        self.settings.setValue("strategies/selected_target_ids", sorted(selected_ids))
+        self.settings.sync()
+        self.load_data()
+        self.populate_tree(use_saved=True)
+        self.populate_table()
+        self.test_results.clear()
+        self.progress_bar.setValue(0)
+        self.progress_label.setText("Ready")
+        self.eta_label.setText("")
 
     def open_history(self):
         dlg = HistoryDialog(self)

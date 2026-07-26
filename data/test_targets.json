@@ -1,0 +1,1195 @@
+{
+  "metadata": {
+    "upstream_repo": "romanvht/ByeByeDPI",
+    "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+    "total_groups": 8,
+    "total_targets": 139,
+    "format_version": 1
+  },
+  "groups": [
+    {
+      "group_id": "cloudflare",
+      "group_name": "Cloudflare",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_cloudflare.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "cloudflare_0",
+          "label": "cloudflare.net",
+          "host": "cloudflare.net",
+          "url": "https://cloudflare.net/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "cloudflare_1",
+          "label": "cloudflare.com",
+          "host": "cloudflare.com",
+          "url": "https://cloudflare.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "cloudflare_2",
+          "label": "cloudflarecn.net",
+          "host": "cloudflarecn.net",
+          "url": "https://cloudflarecn.net/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "cloudflare_3",
+          "label": "cloudflare-ech.com",
+          "host": "cloudflare-ech.com",
+          "url": "https://cloudflare-ech.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "discord",
+      "group_name": "Discord",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_discord.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "discord_0",
+          "label": "dis.gd",
+          "host": "dis.gd",
+          "url": "https://dis.gd/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_1",
+          "label": "discord.co",
+          "host": "discord.co",
+          "url": "https://discord.co/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_2",
+          "label": "discord.gg",
+          "host": "discord.gg",
+          "url": "https://discord.gg/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_3",
+          "label": "discord.app",
+          "host": "discord.app",
+          "url": "https://discord.app/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_4",
+          "label": "discord.com",
+          "host": "discord.com",
+          "url": "https://discord.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_5",
+          "label": "discord.dev",
+          "host": "discord.dev",
+          "url": "https://discord.dev/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_6",
+          "label": "discord.new",
+          "host": "discord.new",
+          "url": "https://discord.new/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_7",
+          "label": "discord.gift",
+          "host": "discord.gift",
+          "url": "https://discord.gift/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_8",
+          "label": "discord.gifts",
+          "host": "discord.gifts",
+          "url": "https://discord.gifts/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_9",
+          "label": "discord.media",
+          "host": "discord.media",
+          "url": "https://discord.media/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_10",
+          "label": "discord.store",
+          "host": "discord.store",
+          "url": "https://discord.store/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_11",
+          "label": "discord.design",
+          "host": "discord.design",
+          "url": "https://discord.design/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_12",
+          "label": "discordapp.com",
+          "host": "discordapp.com",
+          "url": "https://discordapp.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_13",
+          "label": "discordcdn.com",
+          "host": "discordcdn.com",
+          "url": "https://discordcdn.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_14",
+          "label": "discordsez.com",
+          "host": "discordsez.com",
+          "url": "https://discordsez.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_15",
+          "label": "discordsays.com",
+          "host": "discordsays.com",
+          "url": "https://discordsays.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_16",
+          "label": "discordmerch.com",
+          "host": "discordmerch.com",
+          "url": "https://discordmerch.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_17",
+          "label": "discordpartygames.com",
+          "host": "discordpartygames.com",
+          "url": "https://discordpartygames.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_18",
+          "label": "discordactivities.com",
+          "host": "discordactivities.com",
+          "url": "https://discordactivities.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_19",
+          "label": "stable.dl2.discordapp.net",
+          "host": "stable.dl2.discordapp.net",
+          "url": "https://stable.dl2.discordapp.net/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "discord_20",
+          "label": "discord-attachments-uploads-prd.storage.googleapis.com",
+          "host": "discord-attachments-uploads-prd.storage.googleapis.com",
+          "url": "https://discord-attachments-uploads-prd.storage.googleapis.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "general",
+      "group_name": "General",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_general.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "general_0",
+          "label": "rutracker.org",
+          "host": "rutracker.org",
+          "url": "https://rutracker.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "general_1",
+          "label": "nyaa.si",
+          "host": "nyaa.si",
+          "url": "https://nyaa.si/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "general_2",
+          "label": "rutor.org",
+          "host": "rutor.org",
+          "url": "https://rutor.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "general_3",
+          "label": "nnmclub.to",
+          "host": "nnmclub.to",
+          "url": "https://nnmclub.to/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "general_4",
+          "label": "speedtest.net",
+          "host": "speedtest.net",
+          "url": "https://speedtest.net/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "general_5",
+          "label": "ookla.com",
+          "host": "ookla.com",
+          "url": "https://ookla.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "googlevideo",
+      "group_name": "Googlevideo",
+      "enabled_by_default": true,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_googlevideo.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "googlevideo_0",
+          "label": "rr1---sn-4axm-n8vs.googlevideo.com",
+          "host": "rr1---sn-4axm-n8vs.googlevideo.com",
+          "url": "https://rr1---sn-4axm-n8vs.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_1",
+          "label": "rr1---sn-gvnuxaxjvh-o8ge.googlevideo.com",
+          "host": "rr1---sn-gvnuxaxjvh-o8ge.googlevideo.com",
+          "url": "https://rr1---sn-gvnuxaxjvh-o8ge.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_2",
+          "label": "rr1---sn-ug5onuxaxjvh-p3ul.googlevideo.com",
+          "host": "rr1---sn-ug5onuxaxjvh-p3ul.googlevideo.com",
+          "url": "https://rr1---sn-ug5onuxaxjvh-p3ul.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_3",
+          "label": "rr1---sn-ug5onuxaxjvh-n8v6.googlevideo.com",
+          "host": "rr1---sn-ug5onuxaxjvh-n8v6.googlevideo.com",
+          "url": "https://rr1---sn-ug5onuxaxjvh-n8v6.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_4",
+          "label": "rr4---sn-q4flrnsl.googlevideo.com",
+          "host": "rr4---sn-q4flrnsl.googlevideo.com",
+          "url": "https://rr4---sn-q4flrnsl.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_5",
+          "label": "rr10---sn-gvnuxaxjvh-304z.googlevideo.com",
+          "host": "rr10---sn-gvnuxaxjvh-304z.googlevideo.com",
+          "url": "https://rr10---sn-gvnuxaxjvh-304z.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_6",
+          "label": "rr14---sn-n8v7kn7r.googlevideo.com",
+          "host": "rr14---sn-n8v7kn7r.googlevideo.com",
+          "url": "https://rr14---sn-n8v7kn7r.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_7",
+          "label": "rr16---sn-axq7sn76.googlevideo.com",
+          "host": "rr16---sn-axq7sn76.googlevideo.com",
+          "url": "https://rr16---sn-axq7sn76.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_8",
+          "label": "rr1---sn-8ph2xajvh-5xge.googlevideo.com",
+          "host": "rr1---sn-8ph2xajvh-5xge.googlevideo.com",
+          "url": "https://rr1---sn-8ph2xajvh-5xge.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_9",
+          "label": "rr1---sn-gvnuxaxjvh-5gie.googlevideo.com",
+          "host": "rr1---sn-gvnuxaxjvh-5gie.googlevideo.com",
+          "url": "https://rr1---sn-gvnuxaxjvh-5gie.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_10",
+          "label": "rr12---sn-gvnuxaxjvh-bvwz.googlevideo.com",
+          "host": "rr12---sn-gvnuxaxjvh-bvwz.googlevideo.com",
+          "url": "https://rr12---sn-gvnuxaxjvh-bvwz.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_11",
+          "label": "rr5---sn-n8v7knez.googlevideo.com",
+          "host": "rr5---sn-n8v7knez.googlevideo.com",
+          "url": "https://rr5---sn-n8v7knez.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_12",
+          "label": "rr1---sn-u5uuxaxjvhg0-ocje.googlevideo.com",
+          "host": "rr1---sn-u5uuxaxjvhg0-ocje.googlevideo.com",
+          "url": "https://rr1---sn-u5uuxaxjvhg0-ocje.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_13",
+          "label": "rr2---sn-q4fl6ndl.googlevideo.com",
+          "host": "rr2---sn-q4fl6ndl.googlevideo.com",
+          "url": "https://rr2---sn-q4fl6ndl.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_14",
+          "label": "rr5---sn-gvnuxaxjvh-n8vk.googlevideo.com",
+          "host": "rr5---sn-gvnuxaxjvh-n8vk.googlevideo.com",
+          "url": "https://rr5---sn-gvnuxaxjvh-n8vk.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_15",
+          "label": "rr4---sn-jvhnu5g-c35d.googlevideo.com",
+          "host": "rr4---sn-jvhnu5g-c35d.googlevideo.com",
+          "url": "https://rr4---sn-jvhnu5g-c35d.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_16",
+          "label": "rr1---sn-q4fl6n6y.googlevideo.com",
+          "host": "rr1---sn-q4fl6n6y.googlevideo.com",
+          "url": "https://rr1---sn-q4fl6n6y.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_17",
+          "label": "rr2---sn-hgn7ynek.googlevideo.com",
+          "host": "rr2---sn-hgn7ynek.googlevideo.com",
+          "url": "https://rr2---sn-hgn7ynek.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "googlevideo_18",
+          "label": "rr1---sn-xguxaxjvh-gufl.googlevideo.com",
+          "host": "rr1---sn-xguxaxjvh-gufl.googlevideo.com",
+          "url": "https://rr1---sn-xguxaxjvh-gufl.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "social",
+      "group_name": "Social",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_social.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "social_0",
+          "label": "snapchat.com",
+          "host": "snapchat.com",
+          "url": "https://snapchat.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_1",
+          "label": "snap.com",
+          "host": "snap.com",
+          "url": "https://snap.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_2",
+          "label": "linkedin.com",
+          "host": "linkedin.com",
+          "url": "https://linkedin.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_3",
+          "label": "facebook.com",
+          "host": "facebook.com",
+          "url": "https://facebook.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_4",
+          "label": "fb.com",
+          "host": "fb.com",
+          "url": "https://fb.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_5",
+          "label": "fb.me",
+          "host": "fb.me",
+          "url": "https://fb.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_6",
+          "label": "fbcdn.net",
+          "host": "fbcdn.net",
+          "url": "https://fbcdn.net/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_7",
+          "label": "messenger.com",
+          "host": "messenger.com",
+          "url": "https://messenger.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_8",
+          "label": "meta.com",
+          "host": "meta.com",
+          "url": "https://meta.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_9",
+          "label": "instagram.com",
+          "host": "instagram.com",
+          "url": "https://instagram.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_10",
+          "label": "static.cdninstagram.com",
+          "host": "static.cdninstagram.com",
+          "url": "https://static.cdninstagram.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_11",
+          "label": "proton.me",
+          "host": "proton.me",
+          "url": "https://proton.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_12",
+          "label": "medium.com",
+          "host": "medium.com",
+          "url": "https://medium.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_13",
+          "label": "x.com",
+          "host": "x.com",
+          "url": "https://x.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_14",
+          "label": "twitter.com",
+          "host": "twitter.com",
+          "url": "https://twitter.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "social_15",
+          "label": "soundcloud.com",
+          "host": "soundcloud.com",
+          "url": "https://soundcloud.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "telegram",
+      "group_name": "Telegram",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_telegram.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "telegram_0",
+          "label": "telegram.org",
+          "host": "telegram.org",
+          "url": "https://telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_1",
+          "label": "core.telegram.org",
+          "host": "core.telegram.org",
+          "url": "https://core.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_2",
+          "label": "web.telegram.org",
+          "host": "web.telegram.org",
+          "url": "https://web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_3",
+          "label": "webk.telegram.org",
+          "host": "webk.telegram.org",
+          "url": "https://webk.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_4",
+          "label": "my.telegram.org",
+          "host": "my.telegram.org",
+          "url": "https://my.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_5",
+          "label": "translations.telegram.org",
+          "host": "translations.telegram.org",
+          "url": "https://translations.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_6",
+          "label": "instantview.telegram.org",
+          "host": "instantview.telegram.org",
+          "url": "https://instantview.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_7",
+          "label": "blog.telegram.org",
+          "host": "blog.telegram.org",
+          "url": "https://blog.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_8",
+          "label": "comments.telegram.org",
+          "host": "comments.telegram.org",
+          "url": "https://comments.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_9",
+          "label": "verify.telegram.org",
+          "host": "verify.telegram.org",
+          "url": "https://verify.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_10",
+          "label": "login.telegram.org",
+          "host": "login.telegram.org",
+          "url": "https://login.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_11",
+          "label": "auth.telegram.org",
+          "host": "auth.telegram.org",
+          "url": "https://auth.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_12",
+          "label": "api.telegram.org",
+          "host": "api.telegram.org",
+          "url": "https://api.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_13",
+          "label": "promo.telegram.org",
+          "host": "promo.telegram.org",
+          "url": "https://promo.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_14",
+          "label": "desktop.telegram.org",
+          "host": "desktop.telegram.org",
+          "url": "https://desktop.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_15",
+          "label": "macos.telegram.org",
+          "host": "macos.telegram.org",
+          "url": "https://macos.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_16",
+          "label": "ios.telegram.org",
+          "host": "ios.telegram.org",
+          "url": "https://ios.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_17",
+          "label": "android.telegram.org",
+          "host": "android.telegram.org",
+          "url": "https://android.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_18",
+          "label": "reactions.telegram.org",
+          "host": "reactions.telegram.org",
+          "url": "https://reactions.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_19",
+          "label": "claims.telegram.org",
+          "host": "claims.telegram.org",
+          "url": "https://claims.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_20",
+          "label": "x.telegram.org",
+          "host": "x.telegram.org",
+          "url": "https://x.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_21",
+          "label": "help.telegram.org",
+          "host": "help.telegram.org",
+          "url": "https://help.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_22",
+          "label": "docs.telegram.org",
+          "host": "docs.telegram.org",
+          "url": "https://docs.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_23",
+          "label": "schema.telegram.org",
+          "host": "schema.telegram.org",
+          "url": "https://schema.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_24",
+          "label": "dev.telegram.org",
+          "host": "dev.telegram.org",
+          "url": "https://dev.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_25",
+          "label": "contest.telegram.org",
+          "host": "contest.telegram.org",
+          "url": "https://contest.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_26",
+          "label": "premium.telegram.org",
+          "host": "premium.telegram.org",
+          "url": "https://premium.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_27",
+          "label": "settings.telegram.org",
+          "host": "settings.telegram.org",
+          "url": "https://settings.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_28",
+          "label": "qr.telegram.org",
+          "host": "qr.telegram.org",
+          "url": "https://qr.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_29",
+          "label": "stickers.telegram.org",
+          "host": "stickers.telegram.org",
+          "url": "https://stickers.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_30",
+          "label": "emoji.telegram.org",
+          "host": "emoji.telegram.org",
+          "url": "https://emoji.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_31",
+          "label": "themes.telegram.org",
+          "host": "themes.telegram.org",
+          "url": "https://themes.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_32",
+          "label": "donate.telegram.org",
+          "host": "donate.telegram.org",
+          "url": "https://donate.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_33",
+          "label": "fragment.telegram.org",
+          "host": "fragment.telegram.org",
+          "url": "https://fragment.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_34",
+          "label": "ton.telegram.org",
+          "host": "ton.telegram.org",
+          "url": "https://ton.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_35",
+          "label": "wallet.telegram.org",
+          "host": "wallet.telegram.org",
+          "url": "https://wallet.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_36",
+          "label": "pay.telegram.org",
+          "host": "pay.telegram.org",
+          "url": "https://pay.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_37",
+          "label": "telegram.me",
+          "host": "telegram.me",
+          "url": "https://telegram.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_38",
+          "label": "telegram.dog",
+          "host": "telegram.dog",
+          "url": "https://telegram.dog/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_39",
+          "label": "telegra.ph",
+          "host": "telegra.ph",
+          "url": "https://telegra.ph/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_40",
+          "label": "telesco.pe",
+          "host": "telesco.pe",
+          "url": "https://telesco.pe/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_41",
+          "label": "web.telegram.me",
+          "host": "web.telegram.me",
+          "url": "https://web.telegram.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_42",
+          "label": "zws1.web.telegram.org",
+          "host": "zws1.web.telegram.org",
+          "url": "https://zws1.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_43",
+          "label": "zws2.web.telegram.org",
+          "host": "zws2.web.telegram.org",
+          "url": "https://zws2.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_44",
+          "label": "zws1.web.telegram.me",
+          "host": "zws1.web.telegram.me",
+          "url": "https://zws1.web.telegram.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_45",
+          "label": "zws2.web.telegram.me",
+          "host": "zws2.web.telegram.me",
+          "url": "https://zws2.web.telegram.me/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_46",
+          "label": "venus.web.telegram.org",
+          "host": "venus.web.telegram.org",
+          "url": "https://venus.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_47",
+          "label": "pluto.web.telegram.org",
+          "host": "pluto.web.telegram.org",
+          "url": "https://pluto.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_48",
+          "label": "aurora.web.telegram.org",
+          "host": "aurora.web.telegram.org",
+          "url": "https://aurora.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_49",
+          "label": "vesta.web.telegram.org",
+          "host": "vesta.web.telegram.org",
+          "url": "https://vesta.web.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_50",
+          "label": "voice.telegram.org",
+          "host": "voice.telegram.org",
+          "url": "https://voice.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "telegram_51",
+          "label": "cdn.telegram.org",
+          "host": "cdn.telegram.org",
+          "url": "https://cdn.telegram.org/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "türkiye",
+      "group_name": "Türkiye",
+      "enabled_by_default": false,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_türkiye.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "türkiye_0",
+          "label": "roblox.com",
+          "host": "roblox.com",
+          "url": "https://roblox.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_1",
+          "label": "wattpad.com",
+          "host": "wattpad.com",
+          "url": "https://wattpad.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_2",
+          "label": "pastebin.com",
+          "host": "pastebin.com",
+          "url": "https://pastebin.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_3",
+          "label": "4shared.com",
+          "host": "4shared.com",
+          "url": "https://4shared.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_4",
+          "label": "wikileaks.org",
+          "host": "wikileaks.org",
+          "url": "https://wikileaks.org/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_5",
+          "label": "bitly.com",
+          "host": "bitly.com",
+          "url": "https://bitly.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_6",
+          "label": "cutt.ly",
+          "host": "cutt.ly",
+          "url": "https://cutt.ly/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "türkiye_7",
+          "label": "t2m.io",
+          "host": "t2m.io",
+          "url": "https://t2m.io/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    },
+    {
+      "group_id": "youtube",
+      "group_name": "Youtube",
+      "enabled_by_default": true,
+      "source": "file:///tmp/byebyedpi_upstream/romanvht-ByeByeDPI-ffda4fa/app/src/main/assets/proxytest_youtube.sites",
+      "upstream_commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af",
+      "targets": [
+        {
+          "target_id": "youtube_0",
+          "label": "youtu.be",
+          "host": "youtu.be",
+          "url": "https://youtu.be/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_1",
+          "label": "youtube.com",
+          "host": "youtube.com",
+          "url": "https://youtube.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_2",
+          "label": "i.ytimg.com",
+          "host": "i.ytimg.com",
+          "url": "https://i.ytimg.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_3",
+          "label": "i9.ytimg.com",
+          "host": "i9.ytimg.com",
+          "url": "https://i9.ytimg.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_4",
+          "label": "yt3.ggpht.com",
+          "host": "yt3.ggpht.com",
+          "url": "https://yt3.ggpht.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_5",
+          "label": "yt4.ggpht.com",
+          "host": "yt4.ggpht.com",
+          "url": "https://yt4.ggpht.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_6",
+          "label": "googleapis.com",
+          "host": "googleapis.com",
+          "url": "https://googleapis.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_7",
+          "label": "jnn-pa.googleapis.com",
+          "host": "jnn-pa.googleapis.com",
+          "url": "https://jnn-pa.googleapis.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_8",
+          "label": "googleusercontent.com",
+          "host": "googleusercontent.com",
+          "url": "https://googleusercontent.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_9",
+          "label": "signaler-pa.youtube.com",
+          "host": "signaler-pa.youtube.com",
+          "url": "https://signaler-pa.youtube.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_10",
+          "label": "youtubei.googleapis.com",
+          "host": "youtubei.googleapis.com",
+          "url": "https://youtubei.googleapis.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_11",
+          "label": "manifest.googlevideo.com",
+          "host": "manifest.googlevideo.com",
+          "url": "https://manifest.googlevideo.com/",
+          "test_type": "http_head",
+          "notes": ""
+        },
+        {
+          "target_id": "youtube_12",
+          "label": "yt3.googleusercontent.com",
+          "host": "yt3.googleusercontent.com",
+          "url": "https://yt3.googleusercontent.com/",
+          "test_type": "http_head",
+          "notes": ""
+        }
+      ]
+    }
+  ]
+}

@@ -166,7 +166,12 @@ def test_remove_secrets():
     assert cleaned["nested"]["normal_value"] == "hello"
     assert cleaned["nested"]["path"] == "***REDACTED_PATH***"
     assert cleaned["nested"]["path2"] == "***REDACTED_PATH***"
-    assert cleaned["url"] == "http://example.com/api?token=abc"
+    assert "abc" not in cleaned["url"]
+    assert "REDACTED" in cleaned["url"]
+    credential_url = result_bundle._remove_secrets("https://user:pass@example.com/path?api_key=123&safe=yes")
+    assert "user:pass" not in credential_url
+    assert "123" not in credential_url
+    assert "safe=yes" in credential_url
 
 def test_path_traversal(temp_history_dir):
     with pytest.raises(ValueError, match="Path traversal"):

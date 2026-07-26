@@ -5,6 +5,7 @@ import time
 import datetime
 import statistics
 import shutil
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
 from PySide6.QtCore import QStandardPaths
 
@@ -50,9 +51,23 @@ def _remove_secrets(data):
     elif isinstance(data, list):
         return [_remove_secrets(i) for i in data]
     elif isinstance(data, str):
-        if "http://" not in data and "https://" not in data:
-            if "/mnt/" in data or "/home/" in data or "file://" in data:
-                return "***REDACTED_PATH***"
+        if data.startswith(("http://", "https://")):
+            try:
+                parts = urlsplit(data)
+                netloc = parts.netloc.split("@", 1)[-1]  # remove URL credentials
+                sensitive = ("token", "password", "secret", "api_key", "apikey", "cookie", "authorization", "access_key", "session")
+                query = [
+                    (key, "***REDACTED***" if any(marker in key.lower() for marker in sensitive) else value)
+                    for key, value in parse_qsl(parts.query, keep_blank_values=True)
+                ]
+                fragment = parts.fragment
+                if any(marker in fragment.lower() for marker in sensitive):
+                    fragment = "REDACTED"
+                return urlunsplit((parts.scheme, netloc, parts.path, urlencode(query, doseq=True), fragment))
+            except ValueError:
+                return "***REDACTED_URL***"
+        if "/mnt/" in data or "/home/" in data or "file://" in data:
+            return "***REDACTED_PATH***"
         return data
     return data
 

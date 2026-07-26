@@ -20,7 +20,7 @@ ByeByeDPI-Linux-VERSION.tar.gz
 ByeByeDPI-Linux-VERSION.tar.gz.sha256
 ```
 
-The archive contains `RELEASE-METADATA.json`, an internal `SHA256SUMS`, GPL-3.0 project terms, third-party notices and the MIT-licensed ByeDPI source. It intentionally excludes the locally built `vendor/byedpi/ciadpi` binary; the rootless installer builds that executable on the target machine.
+The archive contains `RELEASE-METADATA.json`, an internal `SHA256SUMS`, GPL-3.0 project terms, third-party notices and the MIT-licensed ByeDPI source. It intentionally excludes the locally built `vendor/byedpi/ciadpi` binary; the rootless installer builds that executable on the target machine. The installer automatically accelerates dependency installation using `uv` if present in the system, with a seamless fallback to standard `pip`.
 
 For a controlled reproducibility check:
 

@@ -169,3 +169,56 @@ def test_uninstaller_dry_run_respects_xdg_data_home(tmp_path):
     assert result.returncode == 0, result.stderr
     assert str(tmp_path / "custom-data") in result.stdout
     assert not (tmp_path / "custom-data").exists()
+
+
+def test_uninstaller_succeeds_without_journal(tmp_path):
+    prefix = tmp_path / "prefix"
+    app_dir = prefix / "share/byebyedpi-linux"
+    src_dir = app_dir / "src"
+    venv_bin = app_dir / ".venv/bin"
+    src_dir.mkdir(parents=True)
+    venv_bin.mkdir(parents=True)
+    (src_dir / "gnome_proxy.py").touch()
+    (venv_bin / "python").write_text("#!/bin/sh\nexit 1\n")
+    (venv_bin / "python").chmod(0o755)
+
+    env = os.environ.copy()
+    env["XDG_DATA_HOME"] = str(tmp_path / "data")
+
+    result = subprocess.run(
+        ["bash", "scripts/uninstall-user.sh", "--prefix", str(prefix)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    assert not app_dir.exists()
+
+
+def test_uninstaller_aborts_if_journal_present(tmp_path):
+    prefix = tmp_path / "prefix"
+    app_dir = prefix / "share/byebyedpi-linux"
+    src_dir = app_dir / "src"
+    venv_bin = app_dir / ".venv/bin"
+    src_dir.mkdir(parents=True)
+    venv_bin.mkdir(parents=True)
+    (src_dir / "gnome_proxy.py").touch()
+    (venv_bin / "python").write_text("#!/bin/sh\nexit 1\n")
+    (venv_bin / "python").chmod(0o755)
+
+    data_dir = tmp_path / "data" / "ByeByeDPI-Linux"
+    data_dir.mkdir(parents=True)
+    (data_dir / "gnome_proxy_journal.json").touch()
+
+    env = os.environ.copy()
+    env["XDG_DATA_HOME"] = str(tmp_path / "data")
+
+    result = subprocess.run(
+        ["bash", "scripts/uninstall-user.sh", "--prefix", str(prefix)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert result.returncode != 0
+    assert app_dir.exists()
+    assert (data_dir / "gnome_proxy_journal.json").exists()

@@ -52,19 +52,44 @@ if [ "$DRY_RUN" -eq 1 ]; then
     exit 0
 fi
 
-if [ -x "$APP_DIR/.venv/bin/python" ] && [ -f "$APP_DIR/src/gnome_proxy.py" ]; then
-    APP_DIR="$APP_DIR" "$APP_DIR/.venv/bin/python" - <<'PY'
+DATA_PATHS=(
+    "$USER_DATA_DIR"
+    "$LEGACY_DATA_DIR_1"
+    "$LEGACY_DATA_DIR_2"
+    "$LEGACY_DATA_DIR_3"
+)
+
+JOURNALS_FOUND=0
+for dp in "${DATA_PATHS[@]}"; do
+    if [ -f "$dp/gnome_proxy_journal.json" ]; then
+        JOURNALS_FOUND=$((JOURNALS_FOUND + 1))
+    fi
+done
+
+if [ "$JOURNALS_FOUND" -gt 1 ]; then
+    echo "Error: Multiple GNOME proxy recovery journals found. Automatic recovery is unsafe; uninstall aborted." >&2
+    exit 3
+elif [ "$JOURNALS_FOUND" -eq 1 ]; then
+    if [ ! -x "$APP_DIR/.venv/bin/python" ] || [ ! -f "$APP_DIR/src/gnome_proxy.py" ]; then
+        echo "Error: GNOME proxy recovery journal exists but runtime is broken/missing. Uninstall aborted." >&2
+        exit 3
+    fi
+    APP_DIR="$APP_DIR" "$APP_DIR/.venv/bin/python" - <<'PY' || exit 3
 import os
 import sys
 from pathlib import Path
 app_dir = Path(os.environ["APP_DIR"])
 sys.path.insert(0, str(app_dir / "src"))
-from gnome_proxy import GnomeProxyAdapter
-adapter = GnomeProxyAdapter()
-if adapter.has_journal() and not adapter.restore_proxy():
-    print("Error: GNOME proxy recovery failed; uninstall aborted.", file=sys.stderr)
-    print(adapter.last_error, file=sys.stderr)
-    raise SystemExit(3)
+try:
+    from gnome_proxy import GnomeProxyAdapter
+    adapter = GnomeProxyAdapter()
+    if adapter.has_journal() and not adapter.restore_proxy():
+        print("Error: GNOME proxy recovery failed; uninstall aborted.", file=sys.stderr)
+        print(adapter.last_error, file=sys.stderr)
+        sys.exit(3)
+except Exception as e:
+    print(f"Error: GNOME proxy recovery crashed; uninstall aborted. Details: {e}", file=sys.stderr)
+    sys.exit(3)
 PY
 fi
 

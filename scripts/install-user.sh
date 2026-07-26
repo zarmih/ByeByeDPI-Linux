@@ -59,7 +59,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 [DRY-RUN] Validate Python >= 3.10 and venv support
 [DRY-RUN] Build vendor/byedpi/ciadpi with make when missing
 [DRY-RUN] Copy application to $APP_DIR (excluding .git, .venv, caches and test artifacts)
-[DRY-RUN] Create venv and install requirements-runtime.txt
+[DRY-RUN] Create venv and install requirements-runtime.txt (uv acceleration if available)
 [DRY-RUN] Create launcher: $LAUNCHER
 [DRY-RUN] Create desktop file: $DESKTOP_FILE
 [DRY-RUN] Install icon: $ICON_FILE
@@ -116,7 +116,11 @@ rm -rf "$APP_DIR"
 mv "$APP_DIR.tmp" "$APP_DIR"
 
 python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP_DIR/requirements-runtime.txt"
+if command -v uv >/dev/null 2>&1; then
+    uv pip install --python "$APP_DIR/.venv/bin/python" -r "$APP_DIR/requirements-runtime.txt"
+else
+    "$APP_DIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP_DIR/requirements-runtime.txt"
+fi
 
 cat > "$LAUNCHER" <<EOF
 #!/bin/sh

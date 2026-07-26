@@ -59,6 +59,10 @@ class MainWindow(QMainWindow):
         self.args_input.setReadOnly(True)
         top_layout.addWidget(QLabel("Args:"))
         top_layout.addWidget(self.args_input)
+        
+        self.library_btn = QPushButton("Library...")
+        self.library_btn.clicked.connect(self.open_library)
+        top_layout.addWidget(self.library_btn)
 
         layout.addLayout(top_layout)
 
@@ -99,6 +103,16 @@ class MainWindow(QMainWindow):
         else:
             self.args_input.setReadOnly(True)
             self.args_input.setText(args)
+
+    def open_library(self):
+        from strategies_dialog import StrategiesDialog
+        dialog = StrategiesDialog(self)
+        dialog.strategy_selected.connect(self.on_strategy_selected)
+        dialog.exec()
+
+    def on_strategy_selected(self, args):
+        self.profile_combo.setCurrentText("Custom")
+        self.args_input.setText(args)
 
     def start_process(self):
         if not os.path.exists(self.binary_path):

@@ -105,7 +105,8 @@ jobs:
             --version "$VERSION" \
             --source-date-epoch "$EPOCH" \
             --output-dir dist
-          sha256sum -c "dist/ByeByeDPI-Linux-${VERSION}.tar.gz.sha256"
+          cd dist
+          sha256sum -c "ByeByeDPI-Linux-${VERSION}.tar.gz.sha256"
 
       - name: Upload source release
         uses: actions/upload-artifact@v4

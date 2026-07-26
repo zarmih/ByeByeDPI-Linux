@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=ByeByeDPI-Linux
+Comment=DPI Bypass Client
+Exec=sh -c "cd ~/.local/share/byebyedpi-linux && source .venv/bin/activate && python src/main.py"
+Icon=byebyedpi
+Terminal=false
+Type=Application
+Categories=Network;Utility;

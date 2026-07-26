@@ -31,7 +31,19 @@
    ```
    *Скрипт `dev-run` автоматически выберет доступный графический frontend. **PySide6 (Qt)** является основным и приоритетным фронтендом (версия 6.11.1 успешно протестирована). Если он недоступен, будет использован нативный **GTK3 (PyGObject)** через системный Python. Если и GTK3 отсутствует, запустится минималистичный fallback **Tkinter**.*
 
-  ## Библиотека Стратегий и Тестирование
+## Features
+
+- **Profile Management**: Pre-configured profiles (Default, Fake, Split) and a Custom profile option.
+- **Persistence**: Remembers your selected profile, custom arguments, and window geometry.
+- **System Integration**:
+  - Minimize to system tray.
+  - Automatically manages `ciadpi` background process.
+  - *Optional* user-level GNOME proxy configuration via `gsettings` (auto-applies and restores proxy settings for the GNOME desktop).
+- **Diagnostics**: Built-in first-run diagnostics to check dependencies, binaries, and port availability.
+- **Result History & Comparison**: Save test results, export to CSV, and visually compare performance and capabilities between different DPI bypass strategies.
+- **User Installation**: Easy `install-user.sh` for non-root installation to `~/.local`.
+
+## Библиотека Стратегий и Тестирование
 
   Для обеспечения наилучшего обхода блокировок в `PySide6` (основном интерфейсе) реализована **Библиотека стратегий**. Тестировщик работает матрично: каждая из стратегий тестируется на выбранных пользователем целевых сайтах.
 

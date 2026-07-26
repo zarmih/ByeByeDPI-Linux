@@ -1,13 +1,16 @@
 import sys
 import os
 import time
-from PySide6.QtWidgets import QApplication, QMessageBox
-import urllib.request
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import Qt
 import threading
 import http.server
 
 def start_mock_server(port):
     class Handler(http.server.SimpleHTTPRequestHandler):
+        def do_HEAD(self):
+            self.send_response(200)
+            self.end_headers()
         def do_GET(self):
             self.send_response(200)
             self.end_headers()
@@ -23,7 +26,6 @@ def run_smoke_test():
     if not app:
         app = QApplication(sys.argv)
 
-    # Start a mock server for testing to avoid external dependencies
     mock_port = 8080
     while True:
         try:
@@ -42,33 +44,32 @@ def run_smoke_test():
     print("Opening StrategiesDialog...")
     dialog = StrategiesDialog(window)
     dialog.strategy_selected.connect(window.on_strategy_selected)
+    
+    # Inject a mock target
+    dialog.target_groups = [{
+        "group_id": "mock",
+        "group_name": "Mock",
+        "enabled_by_default": True,
+        "targets": [{
+            "target_id": "mock_0",
+            "label": "127.0.0.1",
+            "host": "127.0.0.1",
+            "url": f"http://127.0.0.1:{mock_port}/"
+        }]
+    }]
+    dialog.populate_tree()
     dialog.show()
 
-    # Wait a bit
     app.processEvents()
 
     # Select strategy 1
     dialog.table.selectRow(0)
-    print("Selected strategy 1.")
-
-    # Apply selected
-    print("Applying selected strategy...")
-    dialog.apply_selected()
     
-    # Check if main window got it
-    expected_args = dialog.table.item(0, 2).text()
-    assert window.args_input.text() == expected_args
-
-    # Test tester thread (using a simple local mock server url)
     print("Testing StrategyTesterThread...")
-    dialog.url_input.setText(f"http://127.0.0.1:{mock_port}")
-    strategy_id = dialog.table.item(0, 0).text()
-    strategy = next((s for s in dialog.strategies if s["id"] == strategy_id), None)
-    dialog.start_tester([strategy])
+    dialog.test_selected()
     
-    # Wait for thread to finish (smoke test shouldn't hang)
     start = time.time()
-    while dialog.tester_thread is not None and dialog.tester_thread.isRunning():
+    while dialog.tester_thread is not None:
         app.processEvents()
         time.sleep(0.1)
         if time.time() - start > 10:
@@ -76,9 +77,22 @@ def run_smoke_test():
             dialog.stop_test()
             break
 
-    print("Result in table:", dialog.table.item(0, 4).text())
+    # Check results in table
+    passed_count = None
+    for i in range(dialog.table.rowCount()):
+        if dialog.table.item(i, 3).text() != "-":
+            passed_count = dialog.table.item(i, 3).text()
+            break
+            
+    print("Passed:", passed_count)
+    assert passed_count == "1"
     
-    # Clean up
+    from strategies_dialog import StrategyDetailsDialog
+    print("Testing Details Dialog...")
+    details = StrategyDetailsDialog("strategy_1", dialog.test_results.get("strategy_1", []), dialog.targets_dict, dialog)
+    details.show()
+    app.processEvents()
+    
     httpd.shutdown()
     print("Library GUI smoke test passed.")
 

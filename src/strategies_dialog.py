@@ -1,6 +1,9 @@
 import json
 import os
 import csv
+import result_bundle
+from history_dialog import HistoryDialog
+import time
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QLabel, QMessageBox,
@@ -495,9 +498,49 @@ class StrategiesDialog(QDialog):
         self.btn_pause.setEnabled(False)
         self.progress_label.setText("Finished")
         self.eta_label.setText("")
+
         self.tester_thread = None
         self.update_ranks()
+        
+        try:
+            bundle = result_bundle.create_bundle(
+                self.strategies, self.get_selected_targets(), self.test_results,
+                getattr(self, "run_start_time", 0), time.time(), "completed",
+                len([s for s in self.strategies if s["id"] in self.test_results]),
+                len(self.get_selected_targets()),
+                self.progress_bar.maximum() if hasattr(self, "progress_bar") else 0,
+                self.completed_runs if hasattr(self, "completed_runs") else 0,
+                {"repo": "romanvht/ByeByeDPI", "commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af"},
+                {"timeout": 5, "policy": "SiteCheckUtils.kt-like"}
+            )
+            result_bundle.save_to_history(bundle)
+        except Exception as e:
+            print(f"History save failed: {e}")
 
+
+    def open_history(self):
+        dlg = HistoryDialog(self)
+        if dlg.exec():
+            if dlg.opened_filepath:
+                try:
+                    with open(dlg.opened_filepath, 'r', encoding='utf-8') as f:
+                        import json
+                        data = json.load(f)
+                    bundle, warnings = result_bundle.validate_and_migrate(data)
+                    self.test_results = bundle.get("results", {})
+                    
+                    if warnings and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                        QMessageBox.warning(self, "Import Warnings", "\n".join(warnings))
+                        
+                    for strat_id, agg in bundle.get("aggregates", {}).get("strategies", {}).items():
+                        self.on_strategy_finished(strat_id, agg["passed"], agg["total"], agg["avg_time"], agg["median_time"], agg["timeouts"], agg["errors"])
+                        
+                    if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                        QMessageBox.information(self, "Success", "Results loaded from history.")
+                except Exception as e:
+                    if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                        QMessageBox.critical(self, "Error", f"Failed to load history: {e}")
+                        
     def update_ranks(self):
         # Sort key: passed DESC, success_rate DESC, median successful duration ASC, timeout/error ASC
         rows = []
@@ -572,36 +615,30 @@ class StrategiesDialog(QDialog):
                 QMessageBox.warning(self, "No data", "No test results to export.")
             return
             
-        filename, filter_used = QFileDialog.getSaveFileName(self, "Export Results", "results", "JSON Files (*.json);;CSV Files (*.csv)")
+        filename, filter_used = QFileDialog.getSaveFileName(self, "Export Results", "results", "JSON Files (*.json);;CSV Flat (*.csv);;CSV Summary (*.csv)")
         if not filename: return
         
-        is_csv = filter_used == "CSV Files (*.csv)" or filename.endswith('.csv')
+        bundle = result_bundle.create_bundle(
+            self.strategies, self.get_selected_targets(), self.test_results,
+            getattr(self, "run_start_time", 0), time.time(),
+            "completed" if getattr(self, "tester_thread", None) is None else "partial",
+            len(set(s["id"] for s in self.strategies if s["id"] in self.test_results)),
+            len(self.get_selected_targets()),
+            self.progress_bar.maximum() if hasattr(self, "progress_bar") else 0,
+            self.completed_runs if hasattr(self, "completed_runs") else 0,
+            {"repo": "romanvht/ByeByeDPI", "commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af"},
+            {"timeout": 5, "policy": "SiteCheckUtils.kt-like"}
+        )
         
         try:
-            if is_csv:
-                import csv
-                with open(filename, 'w', newline='', encoding='utf-8') as f:
-                    writer = csv.writer(f)
-                    writer.writerow(["StrategyID", "TargetID", "Group", "Host", "Status", "Duration", "HTTP_Code", "ErrorMsg"])
-                    for strat_id, targets_res in self.test_results.items():
-                        for tr in targets_res:
-                            t_info = self.targets_dict.get(tr["target_id"], {})
-                            writer.writerow([
-                                strat_id, tr["target_id"], t_info.get("group_name", ""),
-                                t_info.get("host", ""), tr["status"], tr["duration"],
-                                tr["http_code"], tr["error_msg"]
-                            ])
+            if filter_used == "CSV Flat (*.csv)":
+                result_bundle.export_csv_flat(bundle, filename)
+            elif filter_used == "CSV Summary (*.csv)":
+                result_bundle.export_csv_summary(bundle, filename)
             else:
-                data = {
-                    "metadata": {
-                        "strategies": [s["id"] for s in self.strategies if s["id"] in self.test_results],
-                        "policy": "SiteCheckUtils.kt-like",
-                        "note": "Importable"
-                    },
-                    "results": self.test_results
-                }
                 with open(filename, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=2, ensure_ascii=False)
+                    import json
+                    json.dump(bundle, f, indent=2, ensure_ascii=False)
             
             if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
                 QMessageBox.information(self, "Success", "Export completed.")
@@ -615,30 +652,23 @@ class StrategiesDialog(QDialog):
         
         try:
             with open(filename, 'r', encoding='utf-8') as f:
+                import json
                 data = json.load(f)
                 
-            self.test_results = data.get("results", {})
+            bundle, warnings = result_bundle.validate_and_migrate(data)
+            self.test_results = bundle.get("results", {})
             
-            # Recompute aggregates and populate UI
-            for strat_id, results in self.test_results.items():
-                passed = sum(1 for r in results if r["status"] == "Success")
-                total = len(results)
-                timeout = sum(1 for r in results if r["status"] == "Timeout")
-                errors = sum(1 for r in results if r["status"] == "Error")
-                succ_durs = [r["duration"] for r in results if r["status"] == "Success"]
+            if warnings and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(self, "Import Warnings", "\\n".join(warnings))
                 
-                import statistics
-                avg = statistics.mean(succ_durs) if succ_durs else 0.0
-                med = statistics.median(succ_durs) if succ_durs else 0.0
-                
-                self.on_strategy_finished(strat_id, passed, total, avg, med, timeout, errors)
+            for strat_id, agg in bundle.get("aggregates", {}).get("strategies", {}).items():
+                self.on_strategy_finished(strat_id, agg["passed"], agg["total"], agg["avg_time"], agg["median_time"], agg["timeouts"], agg["errors"])
                 
             if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
                 QMessageBox.information(self, "Success", "Results imported.")
         except Exception as e:
             if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
                 QMessageBox.critical(self, "Error", f"Import failed: {e}")
-
 
     def import_targets(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Import Targets JSON", "", "JSON Files (*.json)")

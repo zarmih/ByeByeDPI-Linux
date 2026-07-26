@@ -1,19 +1,29 @@
 # ByeByeDPI-Linux Roadmap
 
-Based on Android ByeByeDPI scenario, adapted for Linux desktop environment.
+The goal is functional Linux equivalence for the useful desktop workflow, not a literal copy of Android VPNService.
 
-## Phase 1: Core UX and Persistence (Current)
-- [x] Save user settings (strategy, custom args, window geometry, etc.) using QSettings.
-- [x] First-run diagnostics: check `ciadpi` binary, port availability, curl, file permissions, clear errors with copy report button.
-- [x] System tray integration (Start/Stop/Check/Open/Quit, proper `ciadpi` termination).
+## Completed foundation
 
-## Phase 2: System Integration (Optional/Safe)
-- [ ] Safe user-level GNOME proxy integration via `gsettings` (optional, snapshot previous, state-journal, rollback).
-- [ ] Installation prep: desktop file, placeholder icon, `install-user.sh` and `uninstall-user.sh` without root, installing to `~/.local`.
-- [ ] Automated tests for persistence, diagnostics, gsettings adapter/rollback with mock-commands.
+- [x] PySide6 frontend with GTK3/Tkinter fallbacks.
+- [x] Local `ciadpi` SOCKS5 lifecycle and proxy checks.
+- [x] 60 upstream strategies and 139 targets in 8 groups.
+- [x] Matrix testing, ranking, details, Pause/Resume, ETA and JSON/CSV reports.
+- [x] Schema v2 history, comparison, validation and privacy redaction.
+- [x] Persistent main/library settings, selected targets and configurable timeouts.
+- [x] Diagnostics and system tray lifecycle.
+- [x] Optional GNOME SOCKS integration with atomic crash-recovery journal.
+- [x] Rootless user installer/uninstaller and desktop/icon resources.
 
-## Phase 3: Advanced Features
-- [ ] Auto-update rules/strategies (simulating Android's update mechanism).
-- [ ] Global shortcut or DBus interface for quick toggling.
-- [ ] Support for KDE and other desktop environments proxy settings.
-- [ ] Statistics and traffic monitoring UI.
+## Next safe product work
+
+- [ ] GUI update center with preview, source SHA, diff, backup and rollback.
+- [ ] Signed/reproducible release artifacts and CI builds.
+- [ ] KDE proxy adapter with the same journal/rollback guarantees.
+- [ ] Per-application setup guides and browser launch helpers.
+- [ ] Broader distro/Wayland regression testing.
+
+## Explicitly out of scope for the current safe mode
+
+- Transparent TUN/VPN routing.
+- Automatic changes to DNS, firewall, nftables, routes or NetworkManager.
+- Claims that every application honours GNOME proxy settings.

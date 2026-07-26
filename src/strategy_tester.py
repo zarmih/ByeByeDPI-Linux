@@ -25,11 +25,20 @@ class StrategyTesterThread(QThread):
     
     finished = Signal()
 
-    def __init__(self, strategies: List[Dict[str, Any]], targets: List[Dict[str, Any]], proxy_port: int = 1081):
+    def __init__(
+        self,
+        strategies: List[Dict[str, Any]],
+        targets: List[Dict[str, Any]],
+        proxy_port: int = 1081,
+        connect_timeout: int = 5,
+        total_timeout: int = 10,
+    ):
         super().__init__()
         self.strategies = strategies
         self.targets = targets
         self.proxy_port = proxy_port
+        self.connect_timeout = max(1, min(int(connect_timeout), 60))
+        self.total_timeout = max(self.connect_timeout, min(int(total_timeout), 120))
         self._is_cancelled = False
         self._pause_event = threading.Event()
         self._pause_event.set()  # Initial state is not paused
@@ -68,13 +77,18 @@ class StrategyTesterThread(QThread):
         curl_cmd = [
             "curl", "-s", "-L", "-o", "/dev/null", "-w", "%{http_code}",
             "--socks5-hostname", f"127.0.0.1:{port}",
-            "--connect-timeout", "5",
+            "--connect-timeout", str(self.connect_timeout),
             "-H", "Connection: close",
             url
         ]
         
         try:
-            proc = subprocess.run(curl_cmd, capture_output=True, text=True, timeout=10)
+            proc = subprocess.run(
+                curl_cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.total_timeout,
+            )
             duration = time.time() - start_time
             http_code = proc.stdout.strip()
             
@@ -89,8 +103,8 @@ class StrategyTesterThread(QThread):
                 
         except subprocess.TimeoutExpired:
             return "Timeout", time.time() - start_time, "", "Process timeout"
-        except Exception as e:
-            return "Error", time.time() - start_time, "", str(e)
+        except OSError as exc:
+            return "Error", time.time() - start_time, "", str(exc)
 
     def run(self):
         total_strategies = len(self.strategies)

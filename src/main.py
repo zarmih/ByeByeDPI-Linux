@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QComboBox, QLineEdit, QTextEdit, QMessageBox,
     QSystemTrayIcon, QMenu, QStyle
 )
-from PySide6.QtCore import Qt, Signal, Slot, QSettings
+from PySide6.QtCore import Qt, Signal, Slot, QSettings, QTimer
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QCheckBox
 
@@ -30,6 +30,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("ByeByeDPI Linux")
         self.resize(600, 400)
+        self._quitting = False
+        self._tray_notice_shown = False
 
         self.settings = QSettings("ByeByeDPI", "ByeByeDPI-Linux")
 
@@ -47,8 +49,14 @@ class MainWindow(QMainWindow):
 
         self.init_ui()
         self.init_tray()
-
         self.load_settings()
+        self._recover_pending_proxy()
+
+        if (
+            not self.settings.value("first_run_done", False, type=bool)
+            and not self._is_test_environment()
+        ):
+            QTimer.singleShot(0, self._show_first_run_diagnostics)
 
     def init_ui(self):
         central_widget = QWidget()
@@ -106,6 +114,10 @@ class MainWindow(QMainWindow):
         self.diag_btn.clicked.connect(self.run_diagnostics)
         controls_layout.addWidget(self.diag_btn)
 
+        self.reset_btn = QPushButton("Reset Settings")
+        self.reset_btn.clicked.connect(self.reset_settings)
+        controls_layout.addWidget(self.reset_btn)
+
         controls_layout.addStretch()
 
         layout.addLayout(controls_layout)
@@ -115,6 +127,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.log_area)
 
     def init_tray(self):
+        self.tray_available = QSystemTrayIcon.isSystemTrayAvailable()
         self.tray_icon = QSystemTrayIcon(self)
         # Use a standard icon for now
         icon = self.style().standardIcon(QStyle.SP_ComputerIcon)
@@ -147,7 +160,8 @@ class MainWindow(QMainWindow):
 
         self.tray_icon.setContextMenu(self.tray_menu)
         self.tray_icon.activated.connect(self.tray_activated)
-        self.tray_icon.show()
+        if self.tray_available:
+            self.tray_icon.show()
 
     def load_settings(self):
         geom = self.settings.value("geometry")
@@ -173,20 +187,78 @@ class MainWindow(QMainWindow):
         if self.gnome_proxy.is_available():
             self.proxy_checkbox.setChecked(proxy_enabled)
 
-        # First-run diagnostics
-        if not self.settings.value("first_run_done", False, type=bool):
-            self.run_diagnostics()
-            self.settings.setValue("first_run_done", True)
-
     def save_settings(self):
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("profile", self.profile_combo.currentText())
         if self.profile_combo.currentText() == "Custom":
-            self.settings.setValue("custom_args", self.args_input.text())
+            custom_args = self.args_input.text()
+            if self._args_are_safe_to_store(custom_args):
+                self.settings.setValue("custom_args", custom_args)
+            else:
+                self.settings.remove("custom_args")
         else:
             self.settings.setValue("custom_args", PROFILES.get(self.profile_combo.currentText(), ""))
 
         self.settings.setValue("gnome_proxy", self.proxy_checkbox.isChecked())
+        self.settings.sync()
+
+    @staticmethod
+    def _args_are_safe_to_store(args: str) -> bool:
+        lowered = args.casefold()
+        sensitive = (
+            "password=", "secret=", "token=", "api_key=", "apikey=",
+            "cookie=", "authorization=",
+        )
+        return not any(marker in lowered for marker in sensitive)
+
+    @staticmethod
+    def _is_test_environment() -> bool:
+        return bool(
+            os.environ.get("PYTEST_CURRENT_TEST")
+            or os.environ.get("QT_QPA_PLATFORM") == "offscreen"
+        )
+
+    def reset_settings(self):
+        self.settings.clear()
+        self.settings.sync()
+        QMessageBox.information(
+            self,
+            "Settings Reset",
+            "Saved settings were cleared. Defaults will be used on the next launch.",
+        )
+
+    def _show_first_run_diagnostics(self):
+        self.run_diagnostics()
+        self.settings.setValue("first_run_done", True)
+        self.settings.sync()
+
+    def _recover_pending_proxy(self):
+        if not self.gnome_proxy.has_journal():
+            return
+        if not self.gnome_proxy.recover_if_needed():
+            message = (
+                "A previous GNOME proxy session could not be restored. "
+                "The recovery journal was retained.\n\n"
+                + self.gnome_proxy.last_error
+            )
+            QTimer.singleShot(
+                0,
+                lambda: QMessageBox.critical(self, "Proxy Recovery Failed", message),
+            )
+
+    def _proxy_port(self) -> int:
+        try:
+            args_list = shlex.split(self.args_input.text().strip())
+        except ValueError:
+            return 1080
+        for index, arg in enumerate(args_list[:-1]):
+            if arg in ("-p", "--port"):
+                try:
+                    port = int(args_list[index + 1])
+                except ValueError:
+                    return 1080
+                return port if 1 <= port <= 65535 else 1080
+        return 1080
 
     def on_profile_changed(self, profile_name):
         args = PROFILES.get(profile_name, "")
@@ -226,15 +298,15 @@ class MainWindow(QMainWindow):
             self.proxy_checkbox.setEnabled(False)
 
             if self.proxy_checkbox.isChecked() and self.gnome_proxy.is_available():
-                port = 1080
-                try:
-                    args_list = shlex.split(args)
-                    for i, arg in enumerate(args_list):
-                        if arg in ('-p', '--port') and i + 1 < len(args_list):
-                            port = int(args_list[i+1])
-                except:
-                    pass
-                self.gnome_proxy.apply_proxy(port)
+                if not self.gnome_proxy.apply_proxy(self._proxy_port()):
+                    self.pm.stop()
+                    QMessageBox.critical(
+                        self,
+                        "GNOME Proxy Error",
+                        "The SOCKS proxy could not be applied safely. "
+                        "ByeDPI was stopped.\n\n" + self.gnome_proxy.last_error,
+                    )
+                    return
 
         else:
             QMessageBox.warning(self, "Error", "Failed to start process or open port.")
@@ -243,14 +315,31 @@ class MainWindow(QMainWindow):
         self.stop_btn.setEnabled(False)
         self.action_stop.setEnabled(False)
         self.pm.stop()
-        if self.proxy_checkbox.isChecked() and self.gnome_proxy.is_available():
-            self.gnome_proxy.restore_proxy()
+        self._restore_proxy_with_warning()
+
+    def _restore_proxy_with_warning(self) -> bool:
+        if not self.gnome_proxy.has_journal():
+            return True
+        restored = self.gnome_proxy.restore_proxy()
+        if not restored:
+            QMessageBox.critical(
+                self,
+                "Proxy Recovery Failed",
+                "GNOME proxy settings were not fully restored. "
+                "The recovery journal was retained.\n\n"
+                + self.gnome_proxy.last_error,
+            )
+        return restored
+
+    def _cleanup_and_stop(self):
+        self._restore_proxy_with_warning()
+        self.pm.stop()
 
     def check_proxy(self):
         args = self.args_input.text().strip()
         try:
             args_list = shlex.split(args)
-        except:
+        except ValueError:
             args_list = []
 
         port = 1080
@@ -295,18 +384,25 @@ class MainWindow(QMainWindow):
             self.proxy_checkbox.setEnabled(True)
         if self.profile_combo.currentText() == "Custom":
             self.args_input.setEnabled(True)
+        # An unexpected ciadpi exit must not leave the desktop proxy active.
+        self._restore_proxy_with_warning()
 
     def closeEvent(self, event):
         self.save_settings()
-        # Hide instead of quit if we have a tray icon
-        if self.tray_icon.isVisible():
+        if not self._quitting and self.tray_available and self.tray_icon.isVisible():
             event.ignore()
             self.hide()
-        else:
-            if self.proxy_checkbox.isChecked() and self.gnome_proxy.is_available():
-                self.gnome_proxy.restore_proxy()
-            self.pm.stop()
-            event.accept()
+            if not self._tray_notice_shown:
+                self.tray_icon.showMessage(
+                    "ByeByeDPI Linux",
+                    "The application is still running in the system tray.",
+                    QSystemTrayIcon.Information,
+                    3000,
+                )
+                self._tray_notice_shown = True
+            return
+        self._cleanup_and_stop()
+        event.accept()
 
     def tray_activated(self, reason):
         if reason == QSystemTrayIcon.Trigger:
@@ -316,17 +412,19 @@ class MainWindow(QMainWindow):
                 self.show()
 
     def quit_app(self):
+        self._quitting = True
         self.save_settings()
-        if self.proxy_checkbox.isChecked() and self.gnome_proxy.is_available():
-            self.gnome_proxy.restore_proxy()
-        self.pm.stop()
+        self._cleanup_and_stop()
+        self.tray_icon.hide()
         QApplication.quit()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
+    app.setOrganizationName("ByeByeDPI")
+    app.setApplicationName("ByeByeDPI-Linux")
 
-    # Don't quit when the last window is closed, keep running in the tray
-    app.setQuitOnLastWindowClosed(False)
+    # Keep running after the window closes only when a real tray is available.
+    app.setQuitOnLastWindowClosed(not QSystemTrayIcon.isSystemTrayAvailable())
 
     window = MainWindow()
     window.show()

@@ -1,34 +1,39 @@
 # ByeByeDPI Linux
 
 Это графический интерфейс (GUI) для [ByeDPI (ciadpi)](https://github.com/hufrea/byedpi), инструмента обхода DPI в Linux.
-Данный проект представляет собой минимально жизнеспособный продукт (MVP), не требующий прав `root` (`sudo`) и не изменяющий системные маршруты, firewall или настройки DNS напрямую.
+Проект является настольным Linux-клиентом без прав `root` (`sudo`). Он не изменяет маршруты, firewall, DNS или NetworkManager. Основной режим — локальный SOCKS5-прокси; дополнительная интеграция GNOME использует только пользовательские настройки `gsettings`.
 
 **Ограничения (Важно!)**
 *   Это **НЕ** полноценный VPN.
 *   Ваш реальный IP-адрес **НЕ** скрывается от посещаемых сайтов.
-*   Системный трафик **ПОКА НЕ** перенаправляется автоматически (никаких TUN/nftables).
-*   Вам необходимо **вручную** настроить ваш браузер или приложение на использование локального SOCKS5-прокси (обычно `127.0.0.1:1080`), который поднимает данная программа.
+*   Это не прозрачный TUN/VPN: приложения, игнорирующие системные proxy-настройки, не будут автоматически направлены через ByeDPI.
+*   Надёжный универсальный вариант — вручную указать SOCKS5 `127.0.0.1:1080` в нужном приложении. В GNOME можно опционально включить системную SOCKS-настройку; предыдущие значения сохраняются в аварийном журнале и восстанавливаются при Stop/Quit или следующем запуске.
 
 ## Установка и запуск
 
-1. Склонируйте репозиторий вместе с субмодулями (уже сделано в этом репозитории):
-   ```bash
-   # git clone --recursive <URL>
-   ```
-2. Соберите бинарный файл `ciadpi` (требуется `gcc` и `make`):
-   ```bash
-   cd vendor/byedpi
-   make
-   cd ../..
-   ```
-3. Инициализируйте локальное окружение Python (требуется установленный `uv`):
-   ```bash
-   ./bootstrap
-   ```
-4. Запустите приложение:
-   ```bash
-   ./dev-run
-   ```
+### Пользовательская установка без root
+
+```bash
+git clone --recurse-submodules https://github.com/zarmih/ByeByeDPI-Linux.git
+cd ByeByeDPI-Linux
+./scripts/install-user.sh
+```
+
+Установщик проверит Python 3.10+, `venv`, `make` и C-компилятор, при необходимости соберёт `ciadpi`, создаст изолированное окружение и установит launcher/desktop-файл в `~/.local`. Предварительный план без изменений:
+
+```bash
+./scripts/install-user.sh --dry-run
+```
+
+Удаление: `./scripts/uninstall-user.sh`. История и настройки сохраняются; для их удаления используйте `--purge-data`.
+
+### Запуск из исходников
+
+```bash
+make -C vendor/byedpi
+./bootstrap
+./dev-run
+```
    *Скрипт `dev-run` автоматически выберет доступный графический frontend. **PySide6 (Qt)** является основным и приоритетным фронтендом (версия 6.11.1 успешно протестирована). Если он недоступен, будет использован нативный **GTK3 (PyGObject)** через системный Python. Если и GTK3 отсутствует, запустится минималистичный fallback **Tkinter**.*
 
 ## Features
@@ -36,19 +41,24 @@
 - **Profile Management**: Pre-configured profiles (Default, Fake, Split) and a Custom profile option.
 - **Persistence**: Remembers your selected profile, custom arguments, and window geometry.
 - **System Integration**:
-  - Minimize to system tray.
-  - Automatically manages `ciadpi` background process.
-  - *Optional* user-level GNOME proxy configuration via `gsettings` (auto-applies and restores proxy settings for the GNOME desktop).
-- **Diagnostics**: Built-in first-run diagnostics to check dependencies, binaries, and port availability.
+  - Minimize to system tray when a tray service is available; otherwise window close performs full cleanup.
+  - Automatically manages the `ciadpi` process and restores a pending GNOME proxy journal on startup/Stop/Quit.
+  - *Optional* user-level GNOME SOCKS proxy configuration via `gsettings`. It is not VPN/TUN and may be ignored by some applications.
+- **Diagnostics**: Copyable first-run report for PySide6, `ciadpi`, submodule, curl, build tools, GNOME schema, local port, writable directories, icon and desktop integration.
 - **Result History & Comparison**: Save test results, export to CSV, and visually compare performance and capabilities between different DPI bypass strategies.
 - **User Installation**: Easy `install-user.sh` for non-root installation to `~/.local`.
+
+
+## Безопасность и границы интеграции
+
+Подробная модель угроз, аварийное восстановление GNOME proxy и ограничения режима SOCKS описаны в [`docs/SECURITY.md`](docs/SECURITY.md).
 
 ## Библиотека Стратегий и Тестирование
 
   Для обеспечения наилучшего обхода блокировок в `PySide6` (основном интерфейсе) реализована **Библиотека стратегий**. Тестировщик работает матрично: каждая из стратегий тестируется на выбранных пользователем целевых сайтах.
 
   - **Источник стратегий и сайтов:** Официальный Android-клиент [romanvht/ByeByeDPI](https://github.com/romanvht/ByeByeDPI).
-  - **Количество стратегий:** 60 шт. (файл `proxytest_strategies.list`). Все они на 100% поддерживаются нашим локальным ядром `ciadpi`.
+  - **Количество стратегий:** 60 шт. (файл `proxytest_strategies.list`). Их параметры синтаксически совместимы с закреплённой версией `ciadpi`; фактическая эффективность зависит от провайдера и сети.
   - **Тестовые сайты (Targets):** 139 сайтов, разбитых на 8 групп (файлы `proxytest_*.sites` в `app/src/main/assets/`). Группы по умолчанию (Default): YouTube и GoogleVideo. Пользователь может выбрать любые встроенные группы или импортировать свой JSON-список.
   - **Upstream commit:** `ffda4fa93d94472217c75e51b45fdd18f966c0af`.
 
@@ -63,7 +73,7 @@
 
   > **Важно:** Успешный HTTPS-тест в библиотеке лишь проверяет факт прохождения TLS-соединения (отсутствие RST от провайдера). Это **не гарантирует**, что этот метод надёжно обойдёт все DPI-блокировки в вашем браузере. Результаты сильно зависят от вашего провайдера. Помните, что это не VPN — ваш реальный IP-адрес не скрывается от конечного сервера!
 
-  - **Обновление списков:** Вы можете обновить списки из upstream, выполнив `./scripts/update_strategies.py` и `./scripts/update_test_targets.py`. Эти скрипты обновят локальные JSON базы.
+  - **Обновление списков:** Перед обновлением используйте `--dry-run`; скрипты `scripts/update_strategies.py` и `scripts/update_test_targets.py` валидируют данные перед заменой локальных JSON. Полученные аргументы никогда не запускаются автоматически.
 
   > **Внимание:** Fallback-интерфейсы (GTK3 и Tkinter) предоставляют базовый функционал запуска и не содержат графической библиотеки стратегий. Для полного функционала используйте PySide6.
 

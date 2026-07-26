@@ -1,56 +1,88 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 DRY_RUN=0
-PREFIX="$HOME/.local"
+PURGE_DATA=0
+PREFIX="${HOME}/.local"
 
-for arg in "$@"; do
-    case $arg in
-        --dry-run)
-            DRY_RUN=1
-            ;;
-        --prefix=*)
-            PREFIX="${arg#*=}"
-            ;;
+usage() {
+    cat <<'EOF'
+Usage: scripts/uninstall-user.sh [--dry-run] [--prefix PATH] [--purge-data]
+
+Removes only files installed by ByeByeDPI Linux. User history and settings are
+kept unless --purge-data is specified. GNOME proxy recovery is attempted first.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --purge-data) PURGE_DATA=1; shift ;;
+        --prefix) [ "$#" -ge 2 ] || { echo "Error: --prefix requires a path" >&2; exit 2; }; PREFIX="$2"; shift 2 ;;
+        --prefix=*) PREFIX="${1#*=}"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
 
-APP_DIR="$PREFIX/share/byebyedpi-linux"
-APP_DESKTOP="$PREFIX/share/applications/byebyedpi.desktop"
-ICON_FILE="$PREFIX/share/icons/hicolor/128x128/apps/byebyedpi.png"
+if [ "$PREFIX" = "/" ] || [ -z "$PREFIX" ]; then
+    echo "Error: unsafe uninstall prefix" >&2
+    exit 2
+fi
 
-echo "Uninstalling ByeByeDPI-Linux from $PREFIX..."
+APP_DIR="$PREFIX/share/byebyedpi-linux"
+LAUNCHER="$PREFIX/bin/byebyedpi-linux"
+DESKTOP_FILE="$PREFIX/share/applications/byebyedpi.desktop"
+ICON_FILE="$PREFIX/share/icons/hicolor/128x128/apps/byebyedpi.png"
+USER_DATA_DIR="${HOME}/.local/share/ByeByeDPI-Linux"
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[DRY-RUN] Would recover GNOME proxy journal if exists."
+    echo "[DRY-RUN] Would recover a pending GNOME proxy journal using $APP_DIR"
     echo "[DRY-RUN] Would remove $APP_DIR"
-    echo "[DRY-RUN] Would remove $APP_DESKTOP"
+    echo "[DRY-RUN] Would remove $LAUNCHER"
+    echo "[DRY-RUN] Would remove $DESKTOP_FILE"
     echo "[DRY-RUN] Would remove $ICON_FILE"
+    if [ "$PURGE_DATA" -eq 1 ]; then
+        echo "[DRY-RUN] Would purge $USER_DATA_DIR"
+    fi
     exit 0
 fi
 
-# Try recovery
-if [ -d "$APP_DIR" ] && [ -f "$APP_DIR/.venv/bin/python3" ]; then
-    echo "Attempting proxy recovery before uninstall..."
-    # A simple recovery call
-    "$APP_DIR/.venv/bin/python3" -c "
-import sys, os
-sys.path.insert(0, os.path.join('$APP_DIR', 'src'))
-try:
-    from gnome_proxy import GnomeProxyAdapter
-    adapter = GnomeProxyAdapter()
-    adapter.restore_proxy()
-except Exception as e:
-    print('Recovery failed or not needed:', e)
-" || true
+if [ -x "$APP_DIR/.venv/bin/python" ] && [ -f "$APP_DIR/src/gnome_proxy.py" ]; then
+    APP_DIR="$APP_DIR" "$APP_DIR/.venv/bin/python" - <<'PY'
+import os
+import sys
+from pathlib import Path
+app_dir = Path(os.environ["APP_DIR"])
+sys.path.insert(0, str(app_dir / "src"))
+from gnome_proxy import GnomeProxyAdapter
+adapter = GnomeProxyAdapter()
+if adapter.has_journal() and not adapter.restore_proxy():
+    print("Error: GNOME proxy recovery failed; uninstall aborted.", file=sys.stderr)
+    print(adapter.last_error, file=sys.stderr)
+    raise SystemExit(3)
+PY
 fi
 
-rm -rf "$APP_DIR"
-rm -f "$APP_DESKTOP"
-rm -f "$ICON_FILE"
+rm -rf -- "$APP_DIR"
+rm -f -- "$LAUNCHER" "$DESKTOP_FILE" "$ICON_FILE"
+
+if [ "$PURGE_DATA" -eq 1 ]; then
+    case "$USER_DATA_DIR" in
+        "$HOME"/.local/share/ByeByeDPI-Linux) rm -rf -- "$USER_DATA_DIR" ;;
+        *) echo "Error: refusing unsafe data path: $USER_DATA_DIR" >&2; exit 2 ;;
+    esac
+fi
 
 if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "$PREFIX/share/applications" || true
+    update-desktop-database "$PREFIX/share/applications" >/dev/null 2>&1 || true
 fi
 
-echo "Uninstallation complete."
+for directory in \
+    "$PREFIX/share/icons/hicolor/128x128/apps" \
+    "$PREFIX/share/applications" \
+    "$PREFIX/bin"; do
+    rmdir --ignore-fail-on-non-empty "$directory" 2>/dev/null || true
+done
+
+echo "ByeByeDPI Linux uninstalled."

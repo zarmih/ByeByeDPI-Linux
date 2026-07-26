@@ -1,91 +1,150 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 DRY_RUN=0
-PREFIX="$HOME/.local"
+PREFIX="${HOME}/.local"
 
-for arg in "$@"; do
-    case $arg in
-        --dry-run)
-            DRY_RUN=1
-            ;;
-        --prefix=*)
-            PREFIX="${arg#*=}"
-            ;;
+usage() {
+    cat <<'EOF'
+Usage: scripts/install-user.sh [--dry-run] [--prefix PATH]
+
+Installs ByeByeDPI Linux for the current user. No root privileges are used.
+EOF
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --prefix) [ "$#" -ge 2 ] || { echo "Error: --prefix requires a path" >&2; exit 2; }; PREFIX="$2"; shift 2 ;;
+        --prefix=*) PREFIX="${1#*=}"; shift ;;
+        -h|--help) usage; exit 0 ;;
+        *) echo "Error: unknown argument: $1" >&2; usage >&2; exit 2 ;;
     esac
 done
 
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SOURCE_DIR="$(CDPATH= cd -- "$SCRIPT_DIR/.." && pwd)"
 APP_DIR="$PREFIX/share/byebyedpi-linux"
 BIN_DIR="$PREFIX/bin"
-APP_DESKTOP="$PREFIX/share/applications/byebyedpi.desktop"
+LAUNCHER="$BIN_DIR/byebyedpi-linux"
+DESKTOP_DIR="$PREFIX/share/applications"
+DESKTOP_FILE="$DESKTOP_DIR/byebyedpi.desktop"
 ICON_DIR="$PREFIX/share/icons/hicolor/128x128/apps"
 ICON_FILE="$ICON_DIR/byebyedpi.png"
 
-echo "Installing ByeByeDPI-Linux to $PREFIX..."
+required_files=(
+    "$SOURCE_DIR/src/main.py"
+    "$SOURCE_DIR/pyproject.toml"
+    "$SOURCE_DIR/requirements-runtime.txt"
+    "$SOURCE_DIR/data/icon.png"
+    "$SOURCE_DIR/vendor/byedpi/Makefile"
+)
+for path in "${required_files[@]}"; do
+    if [ ! -f "$path" ]; then
+        echo "Error: project checkout is incomplete; missing $path" >&2
+        echo "Clone with: git clone --recurse-submodules <repository-url>" >&2
+        exit 1
+    fi
+done
+
+if [ "$PREFIX" = "/" ] || [ -z "$PREFIX" ]; then
+    echo "Error: unsafe installation prefix" >&2
+    exit 2
+fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    echo "[DRY-RUN] Would create directories: $APP_DIR, $BIN_DIR, $ICON_DIR, $(dirname "$APP_DESKTOP")"
-    echo "[DRY-RUN] Would copy files to $APP_DIR"
-    echo "[DRY-RUN] Would setup venv and install dependencies: PySide6 psutil"
-    echo "[DRY-RUN] Would copy desktop file to $APP_DESKTOP"
-    echo "[DRY-RUN] Would copy icon to $ICON_FILE"
+    cat <<EOF
+[DRY-RUN] Source: $SOURCE_DIR
+[DRY-RUN] Prefix: $PREFIX
+[DRY-RUN] Validate Python >= 3.10 and venv support
+[DRY-RUN] Build vendor/byedpi/ciadpi with make when missing
+[DRY-RUN] Copy application to $APP_DIR (excluding .git, .venv, caches and test artifacts)
+[DRY-RUN] Create venv and install requirements-runtime.txt
+[DRY-RUN] Create launcher: $LAUNCHER
+[DRY-RUN] Create desktop file: $DESKTOP_FILE
+[DRY-RUN] Install icon: $ICON_FILE
+EOF
     exit 0
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "Error: python3 is required but not found."
-    exit 1
+command -v python3 >/dev/null 2>&1 || { echo "Error: python3 is required" >&2; exit 1; }
+python3 - <<'PY' || { echo "Error: Python 3.10 or newer is required" >&2; exit 1; }
+import sys
+raise SystemExit(0 if sys.version_info >= (3, 10) else 1)
+PY
+python3 -m venv --help >/dev/null 2>&1 || { echo "Error: Python venv support is required" >&2; exit 1; }
+
+CIADPI="$SOURCE_DIR/vendor/byedpi/ciadpi"
+if [ ! -x "$CIADPI" ]; then
+    command -v make >/dev/null 2>&1 || { echo "Error: make is required to build ciadpi" >&2; exit 1; }
+    CC_BIN="$(command -v cc || command -v gcc || command -v clang || true)"
+    [ -n "$CC_BIN" ] || { echo "Error: a C compiler (cc, gcc or clang) is required" >&2; exit 1; }
+    echo "Building ciadpi..."
+    make -C "$SOURCE_DIR/vendor/byedpi" CC="$CC_BIN"
 fi
+[ -x "$CIADPI" ] || { echo "Error: ciadpi build did not produce an executable" >&2; exit 1; }
 
-if ! python3 -m venv --help >/dev/null 2>&1; then
-    echo "Error: python3-venv is required but not found."
-    exit 1
-fi
+mkdir -p "$PREFIX/share" "$BIN_DIR" "$DESKTOP_DIR" "$ICON_DIR"
+rm -rf "$APP_DIR.tmp"
+mkdir -p "$APP_DIR.tmp"
+SOURCE_DIR="$SOURCE_DIR" DEST_DIR="$APP_DIR.tmp" python3 - <<'PY'
+import os
+import shutil
+from pathlib import Path
+source = Path(os.environ["SOURCE_DIR"])
+dest = Path(os.environ["DEST_DIR"])
+ignored_names = {
+    ".git", ".github", ".venv", "__pycache__", ".pytest_cache",
+    ".mypy_cache", ".ruff_cache", "tests",
+}
+for item in source.iterdir():
+    if item.name in ignored_names:
+        continue
+    target = dest / item.name
+    if item.is_dir():
+        shutil.copytree(
+            item,
+            target,
+            ignore=shutil.ignore_patterns(
+                ".git", "__pycache__", "*.pyc", "*.pyo", ".pytest_cache"
+            ),
+        )
+    else:
+        shutil.copy2(item, target)
+PY
+rm -rf "$APP_DIR"
+mv "$APP_DIR.tmp" "$APP_DIR"
 
-if [ ! -f "vendor/byedpi/ciadpi" ]; then
-    echo "ciadpi not found. Attempting to build..."
-    if command -v make >/dev/null 2>&1 && command -v gcc >/dev/null 2>&1; then
-        git submodule update --init --recursive || true
-        make -C vendor/byedpi || { echo "Failed to build ciadpi"; exit 1; }
-    else
-        echo "Error: ciadpi binary missing and build tools (make, gcc) not found."
-        exit 1
-    fi
-fi
-
-mkdir -p "$APP_DIR" "$BIN_DIR" "$ICON_DIR" "$(dirname "$APP_DESKTOP")"
-
-rsync -a --exclude='.git' --exclude='.venv' --exclude='__pycache__' ./ "$APP_DIR/"
-
-echo "Setting up virtual environment..."
 python3 -m venv "$APP_DIR/.venv"
-"$APP_DIR/.venv/bin/pip" install PySide6 psutil
+"$APP_DIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP_DIR/requirements-runtime.txt"
 
-# Ensure a valid icon exists
-if [ ! -s "data/icon.png" ]; then
-    python3 -c 'import base64; open("data/icon.png", "wb").write(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))'
-fi
+cat > "$LAUNCHER" <<EOF
+#!/bin/sh
+exec "$APP_DIR/.venv/bin/python" "$APP_DIR/src/main.py" "\$@"
+EOF
+chmod 0755 "$LAUNCHER"
 
-# Generate desktop file
-cat > "$APP_DESKTOP" <<EOF
+cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
-Name=ByeByeDPI-Linux
-Comment=DPI Bypass Client
-Exec=sh -c "cd '$APP_DIR' && source .venv/bin/activate && python3 src/main.py"
+Type=Application
+Name=ByeByeDPI Linux
+Comment=Local ByeDPI SOCKS5 client and strategy tester
+Exec=$LAUNCHER
+TryExec=$LAUNCHER
 Icon=byebyedpi
 Terminal=false
-Type=Application
-Categories=Network;Utility;
+Categories=Network;
+StartupNotify=true
+Keywords=proxy;SOCKS5;DPI;network;
 EOF
+install -m 0644 "$SOURCE_DIR/data/icon.png" "$ICON_FILE"
 
 if command -v desktop-file-validate >/dev/null 2>&1; then
-    desktop-file-validate "$APP_DESKTOP" || echo "Warning: desktop-file-validate failed."
+    desktop-file-validate "$DESKTOP_FILE"
 fi
-
-cp data/icon.png "$ICON_FILE" 2>/dev/null || true
-
 if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "$PREFIX/share/applications" || true
+    update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
 fi
 
-echo "Installation complete."
+echo "ByeByeDPI Linux installed successfully."
+echo "Launcher: $LAUNCHER"

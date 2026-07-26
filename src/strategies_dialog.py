@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QLabel, QMessageBox,
     QProgressBar, QAbstractItemView, QTreeWidget, QTreeWidgetItem,
-    QSplitter, QFileDialog, QComboBox, QApplication
+    QSplitter, QFileDialog, QComboBox, QApplication, QCheckBox, QSpinBox
 )
 from PySide6.QtCore import Qt, QSettings, Signal
 from PySide6.QtGui import QGuiApplication
@@ -179,6 +179,7 @@ class StrategiesDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Strategies Library")
         self.resize(1100, 700)
+        self.settings = QSettings("ByeByeDPI", "ByeByeDPI-Linux")
 
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.strategies_file = os.path.join(self.base_dir, "data", "strategies.json")
@@ -193,6 +194,7 @@ class StrategiesDialog(QDialog):
         self.load_data()
         self.tester_thread = None
         self.init_ui()
+        self._restore_dialog_settings()
 
     def load_data(self):
         if os.path.exists(self.strategies_file):
@@ -234,7 +236,7 @@ class StrategiesDialog(QDialog):
         btn_none = QPushButton("None")
         btn_none.clicked.connect(lambda: self.set_tree_checked(Qt.Unchecked))
         btn_def = QPushButton("Default")
-        btn_def.clicked.connect(self.populate_tree)
+        btn_def.clicked.connect(lambda: self.populate_tree(use_saved=False))
         tree_btn_layout.addWidget(btn_all)
         tree_btn_layout.addWidget(btn_none)
         tree_btn_layout.addWidget(btn_def)
@@ -323,12 +325,36 @@ class StrategiesDialog(QDialog):
         self.btn_history.clicked.connect(self.open_history)
         btn_layout.addWidget(self.btn_history)
 
-        from PySide6.QtWidgets import QCheckBox
         self.chk_autosave = QCheckBox("Auto-save History")
-        settings = QSettings("ByeByeDPI", "Linux")
-        self.chk_autosave.setChecked(settings.value("autosave_history", True, type=bool))
-        self.chk_autosave.toggled.connect(lambda v: settings.setValue("autosave_history", v))
+        self.chk_autosave.setChecked(
+            self.settings.value("strategies/autosave_history", True, type=bool)
+        )
+        self.chk_autosave.toggled.connect(
+            lambda value: self.settings.setValue("strategies/autosave_history", value)
+        )
         btn_layout.addWidget(self.chk_autosave)
+
+        btn_layout.addWidget(QLabel("Connect timeout:"))
+        self.connect_timeout_spin = QSpinBox()
+        self.connect_timeout_spin.setRange(1, 60)
+        self.connect_timeout_spin.setSuffix(" s")
+        self.connect_timeout_spin.setValue(
+            self.settings.value("strategies/connect_timeout", 5, type=int)
+        )
+        btn_layout.addWidget(self.connect_timeout_spin)
+
+        btn_layout.addWidget(QLabel("Total timeout:"))
+        self.total_timeout_spin = QSpinBox()
+        self.total_timeout_spin.setRange(1, 120)
+        self.total_timeout_spin.setSuffix(" s")
+        self.total_timeout_spin.setValue(
+            self.settings.value("strategies/total_timeout", 10, type=int)
+        )
+        self.total_timeout_spin.setMinimum(self.connect_timeout_spin.value())
+        self.connect_timeout_spin.valueChanged.connect(
+            self.total_timeout_spin.setMinimum
+        )
+        btn_layout.addWidget(self.total_timeout_spin)
 
         btn_layout.addStretch()
 
@@ -337,7 +363,7 @@ class StrategiesDialog(QDialog):
         btn_layout.addWidget(self.btn_apply)
         main_layout.addLayout(btn_layout)
 
-    def populate_tree(self):
+    def populate_tree(self, use_saved=True):
         self.tree.clear()
         for g in self.target_groups:
             g_item = QTreeWidgetItem(self.tree)
@@ -353,6 +379,44 @@ class StrategiesDialog(QDialog):
                 t_item.setData(0, Qt.UserRole, t)
                 t_item.setFlags(t_item.flags() | Qt.ItemIsUserCheckable)
                 t_item.setCheckState(0, check_state)
+
+        if use_saved and self.settings.contains("strategies/selected_target_ids"):
+            self._apply_saved_target_selection()
+
+    def _apply_saved_target_selection(self):
+        saved = self.settings.value("strategies/selected_target_ids", [])
+        if isinstance(saved, str):
+            saved = [saved]
+        saved_ids = {str(target_id) for target_id in saved}
+        for index in range(self.tree.topLevelItemCount()):
+            group_item = self.tree.topLevelItem(index)
+            for child_index in range(group_item.childCount()):
+                child = group_item.child(child_index)
+                target = child.data(0, Qt.UserRole) or {}
+                child.setCheckState(
+                    0,
+                    Qt.Checked if str(target.get("target_id")) in saved_ids else Qt.Unchecked,
+                )
+
+    def _restore_dialog_settings(self):
+        geometry = self.settings.value("strategies/geometry")
+        if geometry:
+            self.restoreGeometry(geometry)
+
+    def save_dialog_settings(self):
+        selected_ids = [target["target_id"] for target in self.get_selected_targets()]
+        self.settings.setValue("strategies/geometry", self.saveGeometry())
+        self.settings.setValue("strategies/selected_target_ids", selected_ids)
+        self.settings.setValue("strategies/autosave_history", self.chk_autosave.isChecked())
+        self.settings.setValue("strategies/connect_timeout", self.connect_timeout_spin.value())
+        self.settings.setValue("strategies/total_timeout", self.total_timeout_spin.value())
+        self.settings.sync()
+
+    def _policy_info(self):
+        policy = dict(POLICY_INFO)
+        policy["connect_timeout_seconds"] = self.connect_timeout_spin.value()
+        policy["process_timeout_seconds"] = self.total_timeout_spin.value()
+        return policy
 
     def set_tree_checked(self, state):
         for i in range(self.tree.topLevelItemCount()):
@@ -433,7 +497,7 @@ class StrategiesDialog(QDialog):
         self.progress_bar.setValue(0)
         self.test_results.clear()
 
-        self.run_start_time = None
+        self.run_start_time = time.time()
         self.completed_runs = 0
 
         # Reset states for testing strategies
@@ -442,7 +506,12 @@ class StrategiesDialog(QDialog):
                 if self.table.item(i, 1).text() == s["id"]:
                     self.table.setItem(i, 9, QTableWidgetItem("Testing..."))
 
-        self.tester_thread = StrategyTesterThread(strategies_to_test, targets)
+        self.tester_thread = StrategyTesterThread(
+            strategies_to_test,
+            targets,
+            connect_timeout=self.connect_timeout_spin.value(),
+            total_timeout=self.total_timeout_spin.value(),
+        )
         self.tester_thread.progress.connect(self.update_progress)
         self.tester_thread.strategy_started.connect(self.on_strategy_started)
         self.tester_thread.target_result.connect(self.on_target_result)
@@ -557,7 +626,7 @@ class StrategiesDialog(QDialog):
                     self.progress_bar.maximum() if hasattr(self, "progress_bar") else 0,
                     self.completed_runs if hasattr(self, "completed_runs") else 0,
                     UPSTREAM_INFO,
-                    POLICY_INFO
+                    self._policy_info()
                 )
                 result_bundle.save_to_history(bundle)
         except Exception as e:
@@ -669,8 +738,8 @@ class StrategiesDialog(QDialog):
             len(self.get_selected_targets()),
             self.progress_bar.maximum() if hasattr(self, "progress_bar") else 0,
             self.completed_runs if hasattr(self, "completed_runs") else 0,
-            {"repo": "romanvht/ByeByeDPI", "commit": "ffda4fa93d94472217c75e51b45fdd18f966c0af"},
-            {"timeout": 5, "policy": "SiteCheckUtils.kt-like"}
+            UPSTREAM_INFO,
+            self._policy_info()
         )
 
         try:
@@ -751,5 +820,6 @@ class StrategiesDialog(QDialog):
                 QMessageBox.warning(self, "Export Failed", f"Failed to export targets: {str(e)}")
 
     def closeEvent(self, event):
+        self.save_dialog_settings()
         self.stop_test()
         super().closeEvent(event)

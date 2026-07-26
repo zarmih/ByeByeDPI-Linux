@@ -17,7 +17,8 @@ The goal is functional Linux equivalence for the useful desktop workflow, not a 
 ## Next safe product work
 
 - [x] GUI update center with preview, pinned source SHA, content diff, backup and rollback.
-- [ ] Signed/reproducible release artifacts and CI builds.
+- [x] Reproducible source-release artifacts, checksums and CI builds.
+- [ ] Signed release tags and packaged binary artifacts.
 - [ ] KDE proxy adapter with the same journal/rollback guarantees.
 - [ ] Per-application setup guides and browser launch helpers.
 - [ ] Broader distro/Wayland regression testing.

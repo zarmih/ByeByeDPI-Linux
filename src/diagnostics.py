@@ -8,6 +8,7 @@ from pathlib import Path
 
 import PySide6
 from paths import user_config_dir, user_data_dir
+from version import __version__
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -66,7 +67,7 @@ class DiagnosticsDialog(QDialog):
     def run_diagnostics(self, binary_path: str, port: int = 1080) -> bool:
         binary = Path(binary_path)
         project_root = binary.parents[2]
-        report: list[str] = ["--- ByeByeDPI-Linux Diagnostics ---"]
+        report: list[str] = [f"--- ByeByeDPI-Linux {__version__} Diagnostics ---"]
         failures = 0
         warnings = 0
 

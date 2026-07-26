@@ -9,9 +9,10 @@ import shutil
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from pathlib import Path
 from paths import data_search_dirs
+from version import __version__
 
 SCHEMA_VERSION = 2
-APP_VERSION = "1.0.0"
+APP_VERSION = __version__
 MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 MAX_STRATEGIES = 1000
 MAX_TARGETS = 10000

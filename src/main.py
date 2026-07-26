@@ -13,6 +13,7 @@ from PySide6.QtWidgets import QCheckBox
 
 from process_manager import ProcessManager
 from diagnostics import DiagnosticsDialog
+from version import __version__
 from gnome_proxy import GnomeProxyAdapter
 
 PROFILES = {
@@ -28,7 +29,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("ByeByeDPI Linux")
+        self.setWindowTitle(f"ByeByeDPI Linux {__version__}")
         self.resize(600, 400)
         self._quitting = False
         self._tray_notice_shown = False

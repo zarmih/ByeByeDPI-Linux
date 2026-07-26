@@ -1,16 +1,23 @@
 #!/usr/bin/env bash
-set -e
-export http_proxy=http://127.0.0.1:10808 https_proxy=http://127.0.0.1:10808
+set -euo pipefail
 
-if ! command -v uv &> /dev/null; then
-    echo "uv is not installed. Please install uv or make it available in PATH."
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+cd "$ROOT_DIR"
+
+command -v uv >/dev/null 2>&1 || {
+    echo "Error: uv is required for the developer bootstrap." >&2
+    echo "Install uv using its documented package for your system, then rerun ./bootstrap." >&2
+    exit 1
+}
+
+if [ ! -f requirements-runtime.txt ]; then
+    echo "Error: requirements-runtime.txt is missing." >&2
     exit 1
 fi
 
-echo "Setting up virtual environment with uv..."
-if [ ! -d ".venv" ]; then
-    uv venv
-fi
-source .venv/bin/activate
-uv pip install -e ".[dev]"
-echo "Bootstrap complete! Run ./dev-run to start the application."
+uv venv .venv
+uv pip install --python .venv/bin/python -r requirements-runtime.txt
+uv pip install --python .venv/bin/python "pytest>=7.0.0"
+
+echo "Bootstrap complete. Build ciadpi with: make -C vendor/byedpi"
+echo "Run the application with: ./dev-run"

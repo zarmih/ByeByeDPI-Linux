@@ -58,8 +58,8 @@ def run_smoke_test():
         }]
     }]
     dialog.populate_tree()
+    dialog.set_tree_checked(Qt.Checked)
     dialog.show()
-
     app.processEvents()
 
     # Select strategy 1

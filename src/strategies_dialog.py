@@ -1,12 +1,14 @@
 import json
 import os
+import csv
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QLabel, QMessageBox,
     QProgressBar, QAbstractItemView, QTreeWidget, QTreeWidgetItem,
-    QSplitter, QFileDialog
+    QSplitter, QFileDialog, QComboBox, QApplication
 )
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QGuiApplication
 from strategy_tester import StrategyTesterThread
 
 class StrategyDetailsDialog(QDialog):
@@ -14,26 +16,124 @@ class StrategyDetailsDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Details for Strategy: {strategy_id}")
         self.resize(800, 600)
+        self.results = results
+        self.targets_dict = targets_dict
         layout = QVBoxLayout(self)
         
+        # Filters
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Status:"))
+        self.status_filter = QComboBox()
+        self.status_filter.addItems(["All", "Passed", "Failed", "Timeout", "Error"])
+        self.status_filter.currentTextChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.status_filter)
+        
+        filter_layout.addWidget(QLabel("Search:"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Search domain or group...")
+        self.search_input.textChanged.connect(self.apply_filters)
+        filter_layout.addWidget(self.search_input)
+        
+        self.btn_copy = QPushButton("Copy Selected")
+        self.btn_copy.clicked.connect(self.copy_selected)
+        filter_layout.addWidget(self.btn_copy)
+        
+        layout.addLayout(filter_layout)
+        
+        # Summary Label
+        self.summary_label = QLabel()
+        self.summary_label.setWordWrap(True)
+        layout.addWidget(self.summary_label)
+        
+        # Table
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["Group", "Host/URL", "Status", "HTTP Code", "Time (s)", "Error"])
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         layout.addWidget(self.table)
         
-        self.table.setRowCount(len(results))
-        for i, res in enumerate(results):
+        self.populate_data()
+        
+    def populate_data(self):
+        self.table.setRowCount(len(self.results))
+        counts = {"All": 0, "Passed": 0, "Failed": 0, "Timeout": 0, "Error": 0}
+        group_counts = {}
+        
+        for i, res in enumerate(self.results):
             tid = res["target_id"]
-            target = targets_dict.get(tid, {})
+            target = self.targets_dict.get(tid, {})
             group = target.get("group_name", "Unknown")
             host = target.get("host", tid)
+            status = res["status"]
+            
+            # Count status
+            counts["All"] += 1
+            if status == "Success":
+                counts["Passed"] += 1
+            elif status == "Timeout":
+                counts["Timeout"] += 1
+            else:
+                counts["Error"] += 1
+                counts["Failed"] += 1
+                
+            # Count groups
+            if group not in group_counts:
+                group_counts[group] = {"passed": 0, "total": 0}
+            group_counts[group]["total"] += 1
+            if status == "Success":
+                group_counts[group]["passed"] += 1
             
             self.table.setItem(i, 0, QTableWidgetItem(group))
             self.table.setItem(i, 1, QTableWidgetItem(host))
-            self.table.setItem(i, 2, QTableWidgetItem(res["status"]))
-            self.table.setItem(i, 3, QTableWidgetItem(res["http_code"]))
-            self.table.setItem(i, 4, QTableWidgetItem(f"{res['duration']:.2f}"))
-            self.table.setItem(i, 5, QTableWidgetItem(res["error_msg"]))
+            self.table.setItem(i, 2, QTableWidgetItem(status))
+            self.table.setItem(i, 3, QTableWidgetItem(res.get("http_code", "")))
+            self.table.setItem(i, 4, QTableWidgetItem(f"{res.get('duration', 0):.2f}"))
+            self.table.setItem(i, 5, QTableWidgetItem(res.get("error_msg", "")))
+            
+        group_summary = " | ".join([f"{g}: {c['passed']}/{c['total']}" for g, c in group_counts.items()])
+        summary_text = (f"Total: {counts['All']} | Passed: {counts['Passed']} | Timeout: {counts['Timeout']} | Error: {counts['Error']}\n"
+                        f"Groups: {group_summary}")
+        self.summary_label.setText(summary_text)
+
+    def apply_filters(self):
+        status = self.status_filter.currentText()
+        search_text = self.search_input.text().lower()
+        
+        for i in range(self.table.rowCount()):
+            match_status = True
+            row_status = self.table.item(i, 2).text()
+            if status == "Passed" and row_status != "Success":
+                match_status = False
+            elif status == "Timeout" and row_status != "Timeout":
+                match_status = False
+            elif status == "Error" and row_status != "Error":
+                match_status = False
+            elif status == "Failed" and row_status == "Success":
+                match_status = False
+                
+            match_search = False
+            for j in range(self.table.columnCount()):
+                item = self.table.item(i, j)
+                if item and search_text in item.text().lower():
+                    match_search = True
+                    break
+                    
+            self.table.setRowHidden(i, not (match_status and match_search))
+
+    def copy_selected(self):
+        selected_ranges = self.table.selectedRanges()
+        if not selected_ranges:
+            return
+        
+        texts = []
+        for r in selected_ranges:
+            for i in range(r.topRow(), r.bottomRow() + 1):
+                if not self.table.isRowHidden(i):
+                    row_data = [self.table.item(i, j).text() for j in range(self.table.columnCount()) if self.table.item(i, j)]
+                    texts.append("\t".join(row_data))
+                    
+        clipboard = QGuiApplication.clipboard()
+        clipboard.setText("\n".join(texts))
 
 class StrategiesDialog(QDialog):
     strategy_selected = Signal(str)
@@ -41,7 +141,7 @@ class StrategiesDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Strategies Library")
-        self.resize(1000, 700)
+        self.resize(1100, 700)
 
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.strategies_file = os.path.join(self.base_dir, "data", "strategies.json")
@@ -51,6 +151,7 @@ class StrategiesDialog(QDialog):
         self.targets_dict = {}
         
         self.test_results = {} # strategy_id -> list of target results
+        self.is_paused = False
 
         self.load_data()
         self.tester_thread = None
@@ -97,8 +198,6 @@ class StrategiesDialog(QDialog):
         btn_none.clicked.connect(lambda: self.set_tree_checked(Qt.Unchecked))
         btn_def = QPushButton("Default")
         btn_def.clicked.connect(self.populate_tree)
-        
-        
         tree_btn_layout.addWidget(btn_all)
         tree_btn_layout.addWidget(btn_none)
         tree_btn_layout.addWidget(btn_def)
@@ -125,8 +224,8 @@ class StrategiesDialog(QDialog):
         search_layout.addWidget(self.search_input)
         right_layout.addLayout(search_layout)
 
-        self.table = QTableWidget(0, 9)
-        self.table.setHorizontalHeaderLabels(["Rank", "ID", "Name", "Passed", "Total", "%", "Time (s)", "Err", "Status"])
+        self.table = QTableWidget(0, 10)
+        self.table.setHorizontalHeaderLabels(["Rank", "ID", "Name", "Passed", "Total", "%", "Avg", "Median", "Err", "Status"])
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -136,17 +235,19 @@ class StrategiesDialog(QDialog):
         right_layout.addWidget(self.table)
         
         self.progress_label = QLabel("")
+        self.eta_label = QLabel("")
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         
         prog_layout = QHBoxLayout()
         prog_layout.addWidget(self.progress_label)
+        prog_layout.addWidget(self.eta_label)
         prog_layout.addWidget(self.progress_bar)
         right_layout.addLayout(prog_layout)
 
         splitter.addWidget(left_widget)
         splitter.addWidget(right_widget)
-        splitter.setSizes([300, 700])
+        splitter.setSizes([300, 800])
         main_layout.addWidget(splitter)
 
         # Buttons
@@ -159,6 +260,11 @@ class StrategiesDialog(QDialog):
         self.btn_test_all.clicked.connect(self.test_all)
         btn_layout.addWidget(self.btn_test_all)
 
+        self.btn_pause = QPushButton("Pause")
+        self.btn_pause.clicked.connect(self.toggle_pause)
+        self.btn_pause.setEnabled(False)
+        btn_layout.addWidget(self.btn_pause)
+
         self.btn_stop_test = QPushButton("Stop Test")
         self.btn_stop_test.clicked.connect(self.stop_test)
         self.btn_stop_test.setEnabled(False)
@@ -168,6 +274,14 @@ class StrategiesDialog(QDialog):
         self.btn_select_best.clicked.connect(self.select_best)
         btn_layout.addWidget(self.btn_select_best)
         
+        self.btn_export_res = QPushButton("Export Results")
+        self.btn_export_res.clicked.connect(self.export_results)
+        btn_layout.addWidget(self.btn_export_res)
+        
+        self.btn_import_res = QPushButton("Import Results")
+        self.btn_import_res.clicked.connect(self.import_results)
+        btn_layout.addWidget(self.btn_import_res)
+
         btn_layout.addStretch()
 
         self.btn_apply = QPushButton("Apply Selected")
@@ -216,9 +330,10 @@ class StrategiesDialog(QDialog):
             self.table.setItem(i, 3, QTableWidgetItem("-")) # Passed
             self.table.setItem(i, 4, QTableWidgetItem("-")) # Total
             self.table.setItem(i, 5, QTableWidgetItem("-")) # %
-            self.table.setItem(i, 6, QTableWidgetItem("-")) # Time
-            self.table.setItem(i, 7, QTableWidgetItem("-")) # Errors
-            self.table.setItem(i, 8, QTableWidgetItem("Ready"))
+            self.table.setItem(i, 6, QTableWidgetItem("-")) # Avg
+            self.table.setItem(i, 7, QTableWidgetItem("-")) # Median
+            self.table.setItem(i, 8, QTableWidgetItem("-")) # Errors
+            self.table.setItem(i, 9, QTableWidgetItem("Ready"))
         self.table.setSortingEnabled(True)
 
     def filter_table(self, text):
@@ -242,7 +357,6 @@ class StrategiesDialog(QDialog):
         if strategy:
             self.start_tester([strategy])
 
-
     def test_all(self):
         self.start_tester(self.strategies)
 
@@ -251,21 +365,34 @@ class StrategiesDialog(QDialog):
         if not targets:
             QMessageBox.warning(self, "Error", "No targets selected.")
             return
+            
+        total_runs = len(strategies_to_test) * len(targets)
+        
+        # Show warning if large run (skip warning in test mode if running without real DISPLAY)
+        if total_runs > 3000 and os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+            reply = QMessageBox.question(self, "Large Test Run", f"You are about to start {total_runs} tests.\nThis may take a while and cause network load.\nContinue?", QMessageBox.Yes | QMessageBox.No)
+            if reply == QMessageBox.No: return
 
         self.btn_test_selected.setEnabled(False)
         self.btn_test_all.setEnabled(False)
         self.btn_stop_test.setEnabled(True)
+        self.btn_pause.setEnabled(True)
+        self.btn_pause.setText("Pause")
+        self.is_paused = False
         
         self.progress_bar.setVisible(True)
-        self.progress_bar.setMaximum(len(strategies_to_test) * len(targets))
+        self.progress_bar.setMaximum(total_runs)
         self.progress_bar.setValue(0)
         self.test_results.clear()
+        
+        self.run_start_time = None
+        self.completed_runs = 0
 
         # Reset states for testing strategies
         for s in strategies_to_test:
             for i in range(self.table.rowCount()):
                 if self.table.item(i, 1).text() == s["id"]:
-                    self.table.setItem(i, 8, QTableWidgetItem("Testing..."))
+                    self.table.setItem(i, 9, QTableWidgetItem("Testing..."))
 
         self.tester_thread = StrategyTesterThread(strategies_to_test, targets)
         self.tester_thread.progress.connect(self.update_progress)
@@ -275,16 +402,46 @@ class StrategiesDialog(QDialog):
         self.tester_thread.finished.connect(self.on_tester_finished)
         self.tester_thread.start()
 
+    def toggle_pause(self):
+        if not self.tester_thread:
+            return
+        self.is_paused = not self.is_paused
+        if self.is_paused:
+            self.btn_pause.setText("Resume")
+            self.progress_label.setText("Pausing after current check...")
+            self.tester_thread.pause()
+        else:
+            self.btn_pause.setText("Pause")
+            self.tester_thread.resume()
+
     def update_progress(self, s_idx, s_total, t_idx, t_total):
+        if not self.run_start_time:
+            import time
+            self.run_start_time = time.time()
+            
         current_global = s_idx * t_total + t_idx
         self.progress_bar.setValue(current_global)
-        self.progress_label.setText(f"Strategy {s_idx+1}/{s_total}, Target {t_idx+1}/{t_total}")
+        
+        if not self.is_paused:
+            self.progress_label.setText(f"Strategy {s_idx+1}/{s_total}, Target {t_idx+1}/{t_total}")
+            
+        # Calc ETA
+        self.completed_runs = current_global
+        if self.completed_runs > 5:
+            import time
+            elapsed = time.time() - self.run_start_time
+            avg_sec = elapsed / self.completed_runs
+            remains = self.progress_bar.maximum() - self.completed_runs
+            eta_sec = int(remains * avg_sec)
+            self.eta_label.setText(f"ETA: {eta_sec}s")
+        else:
+            self.eta_label.setText("ETA: calculating...")
 
     def on_strategy_started(self, strategy_id):
         self.test_results[strategy_id] = []
         for i in range(self.table.rowCount()):
             if self.table.item(i, 1).text() == strategy_id:
-                self.table.setItem(i, 8, QTableWidgetItem("Running..."))
+                self.table.setItem(i, 9, QTableWidgetItem("Running..."))
                 break
 
     def on_target_result(self, strategy_id, target_id, status, duration, http_code, error_msg):
@@ -297,7 +454,7 @@ class StrategiesDialog(QDialog):
                 "error_msg": error_msg
             })
 
-    def on_strategy_finished(self, strategy_id, passed, total, avg_time, timeout, error):
+    def on_strategy_finished(self, strategy_id, passed, total, avg_time, median_time, timeout, error):
         try:
             self.table.setSortingEnabled(False)
             for i in range(self.table.rowCount()):
@@ -309,15 +466,20 @@ class StrategiesDialog(QDialog):
                     item_pct.setData(Qt.UserRole, pct)
                     self.table.setItem(i, 5, item_pct)
                     
-                    item_time = QTableWidgetItem(f"{avg_time:.2f}")
-                    item_time.setData(Qt.UserRole, avg_time)
-                    self.table.setItem(i, 6, item_time)
+                    item_avg = QTableWidgetItem(f"{avg_time:.2f}")
+                    item_avg.setData(Qt.UserRole, avg_time)
+                    self.table.setItem(i, 6, item_avg)
+                    
+                    item_med = QTableWidgetItem(f"{median_time:.2f}")
+                    item_med.setData(Qt.UserRole, median_time)
+                    self.table.setItem(i, 7, item_med)
                     
                     self.table.setItem(i, 4, QTableWidgetItem(str(total)))
-                    self.table.setItem(i, 7, QTableWidgetItem(str(timeout + error)))
-                    self.table.setItem(i, 8, QTableWidgetItem("Done"))
+                    self.table.setItem(i, 8, QTableWidgetItem(str(timeout + error)))
+                    self.table.setItem(i, 9, QTableWidgetItem("Done"))
                     break
             self.table.setSortingEnabled(True)
+            self.update_ranks()
         except Exception as e:
             print(f"Exception in on_strategy_finished: {e}")
 
@@ -330,28 +492,39 @@ class StrategiesDialog(QDialog):
         self.btn_test_selected.setEnabled(True)
         self.btn_test_all.setEnabled(True)
         self.btn_stop_test.setEnabled(False)
+        self.btn_pause.setEnabled(False)
         self.progress_label.setText("Finished")
+        self.eta_label.setText("")
         self.tester_thread = None
         self.update_ranks()
 
     def update_ranks(self):
-        # Sort manually by % (desc), then Time (asc)
+        # Sort key: passed DESC, success_rate DESC, median successful duration ASC, timeout/error ASC
         rows = []
         for i in range(self.table.rowCount()):
-            pct_item = self.table.item(i, 5)
-            time_item = self.table.item(i, 6)
-            pct = pct_item.data(Qt.UserRole) if pct_item and pct_item.data(Qt.UserRole) is not None else -1
-            time_val = time_item.data(Qt.UserRole) if time_item and time_item.data(Qt.UserRole) is not None else 9999
-            id_val = self.table.item(i, 1).text()
-            rows.append((pct, -time_val, i, id_val))
+            passed_str = self.table.item(i, 3).text()
+            passed = int(passed_str) if passed_str.isdigit() else -1
             
-        rows.sort(reverse=True)
+            pct_item = self.table.item(i, 5)
+            pct = pct_item.data(Qt.UserRole) if pct_item and pct_item.data(Qt.UserRole) is not None else -1
+            
+            med_item = self.table.item(i, 7)
+            med_time = med_item.data(Qt.UserRole) if med_item and med_item.data(Qt.UserRole) is not None else 9999
+            
+            err_str = self.table.item(i, 8).text()
+            errs = int(err_str) if err_str.isdigit() else 9999
+            
+            id_val = self.table.item(i, 1).text()
+            # To sort DESC for passed/pct, use negative. For med_time/errs ASC, use positive
+            rows.append((-passed, -pct, med_time, errs, i, id_val))
+            
+        rows.sort()
         
         self.table.setSortingEnabled(False)
-        for rank, (pct, neg_time, orig_idx, id_val) in enumerate(rows):
+        for rank, (neg_p, neg_pct, med_t, errs, orig_idx, id_val) in enumerate(rows):
             for i in range(self.table.rowCount()):
                 if self.table.item(i, 1).text() == id_val:
-                    if pct >= 0:
+                    if neg_p <= 0: # meaning passed >= 0
                         self.table.setItem(i, 0, QTableWidgetItem(str(rank + 1)))
                     break
         self.table.setSortingEnabled(True)
@@ -369,19 +542,22 @@ class StrategiesDialog(QDialog):
         if best_row >= 0:
             self.table.selectRow(best_row)
         else:
-            QMessageBox.information(self, "No Success", "No tested strategies available.")
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.information(self, "No Success", "No tested strategies available.")
 
     def show_details(self, index):
         row = index.row()
         strategy_id = self.table.item(row, 1).text()
         if strategy_id in self.test_results:
             dlg = StrategyDetailsDialog(strategy_id, self.test_results[strategy_id], self.targets_dict, self)
-            dlg.exec()
+            dlg.show()
+            QApplication.processEvents()
 
     def apply_selected(self):
         row = self.table.currentRow()
         if row < 0:
-            QMessageBox.warning(self, "No selection", "Please select a strategy to apply.")
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(self, "No selection", "Please select a strategy to apply.")
             return
         
         strategy_id = self.table.item(row, 1).text()
@@ -389,6 +565,80 @@ class StrategiesDialog(QDialog):
         if strategy:
             self.strategy_selected.emit(strategy["args"])
             self.accept()
+
+    def export_results(self):
+        if not self.test_results:
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(self, "No data", "No test results to export.")
+            return
+            
+        filename, filter_used = QFileDialog.getSaveFileName(self, "Export Results", "results", "JSON Files (*.json);;CSV Files (*.csv)")
+        if not filename: return
+        
+        is_csv = filter_used == "CSV Files (*.csv)" or filename.endswith('.csv')
+        
+        try:
+            if is_csv:
+                import csv
+                with open(filename, 'w', newline='', encoding='utf-8') as f:
+                    writer = csv.writer(f)
+                    writer.writerow(["StrategyID", "TargetID", "Group", "Host", "Status", "Duration", "HTTP_Code", "ErrorMsg"])
+                    for strat_id, targets_res in self.test_results.items():
+                        for tr in targets_res:
+                            t_info = self.targets_dict.get(tr["target_id"], {})
+                            writer.writerow([
+                                strat_id, tr["target_id"], t_info.get("group_name", ""),
+                                t_info.get("host", ""), tr["status"], tr["duration"],
+                                tr["http_code"], tr["error_msg"]
+                            ])
+            else:
+                data = {
+                    "metadata": {
+                        "strategies": [s["id"] for s in self.strategies if s["id"] in self.test_results],
+                        "policy": "SiteCheckUtils.kt-like",
+                        "note": "Importable"
+                    },
+                    "results": self.test_results
+                }
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=2, ensure_ascii=False)
+            
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.information(self, "Success", "Export completed.")
+        except Exception as e:
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.critical(self, "Error", str(e))
+
+    def import_results(self):
+        filename, _ = QFileDialog.getOpenFileName(self, "Import Results", "", "JSON Files (*.json)")
+        if not filename: return
+        
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                
+            self.test_results = data.get("results", {})
+            
+            # Recompute aggregates and populate UI
+            for strat_id, results in self.test_results.items():
+                passed = sum(1 for r in results if r["status"] == "Success")
+                total = len(results)
+                timeout = sum(1 for r in results if r["status"] == "Timeout")
+                errors = sum(1 for r in results if r["status"] == "Error")
+                succ_durs = [r["duration"] for r in results if r["status"] == "Success"]
+                
+                import statistics
+                avg = statistics.mean(succ_durs) if succ_durs else 0.0
+                med = statistics.median(succ_durs) if succ_durs else 0.0
+                
+                self.on_strategy_finished(strat_id, passed, total, avg, med, timeout, errors)
+                
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.information(self, "Success", "Results imported.")
+        except Exception as e:
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.critical(self, "Error", f"Import failed: {e}")
+
 
     def import_targets(self):
         filename, _ = QFileDialog.getOpenFileName(self, "Import Targets JSON", "", "JSON Files (*.json)")
@@ -410,9 +660,11 @@ class StrategiesDialog(QDialog):
                         self.targets_dict[t["target_id"]] = t
                         
                 self.populate_tree()
-                QMessageBox.information(self, "Success", "Targets imported successfully.")
+                if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                    QMessageBox.information(self, "Success", "Targets imported successfully.")
         except Exception as e:
-            QMessageBox.warning(self, "Import Failed", f"Failed to import targets:\n{str(e)}")
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(self, "Import Failed", f"Failed to import targets: {str(e)}")
 
     def export_targets(self):
         filename, _ = QFileDialog.getSaveFileName(self, "Export Targets JSON", "custom_targets.json", "JSON Files (*.json)")
@@ -425,11 +677,12 @@ class StrategiesDialog(QDialog):
             }
             with open(filename, 'w', encoding='utf-8') as f:
                 json.dump(data, f, indent=2, ensure_ascii=False)
-            QMessageBox.information(self, "Success", "Targets exported successfully.")
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.information(self, "Success", "Targets exported successfully.")
         except Exception as e:
-            QMessageBox.warning(self, "Export Failed", f"Failed to export targets:\n{str(e)}")
+            if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
+                QMessageBox.warning(self, "Export Failed", f"Failed to export targets: {str(e)}")
 
     def closeEvent(self, event):
         self.stop_test()
         super().closeEvent(event)
-

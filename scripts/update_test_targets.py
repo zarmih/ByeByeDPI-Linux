@@ -70,7 +70,8 @@ def main():
             content = fetch_local(file_path)
             source_url = f"file://{file_path}"
         else:
-            url = f"{ASSETS_URL_BASE}/{filename}"
+            import urllib.parse
+            url = f"{ASSETS_URL_BASE}/{urllib.parse.quote(filename)}"
             content = fetch_file(url, args.proxy)
             source_url = url
             time.sleep(0.5) # rate limit

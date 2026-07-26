@@ -7,6 +7,9 @@ import shlex
 from typing import List, Dict, Any, Tuple
 from PySide6.QtCore import QThread, Signal
 
+import threading
+import statistics
+
 class StrategyTesterThread(QThread):
     # Emit progress: strategy_idx, total_strategies, target_idx, total_targets
     progress = Signal(object, object, object, object) 
@@ -17,8 +20,8 @@ class StrategyTesterThread(QThread):
     # Emit target result: strategy_id, target_id, status, duration, http_code, error_msg
     target_result = Signal(object, object, object, object, object, object)
     
-    # Emit strategy aggregate: strategy_id, passed, total, avg_time, timeout, error
-    strategy_finished = Signal(object, object, object, object, object, object)
+    # Emit strategy aggregate: strategy_id, passed, total, avg_time, median_time, timeout, error
+    strategy_finished = Signal(object, object, object, object, object, object, object)
     
     finished = Signal()
 
@@ -28,11 +31,20 @@ class StrategyTesterThread(QThread):
         self.targets = targets
         self.proxy_port = proxy_port
         self._is_cancelled = False
+        self._pause_event = threading.Event()
+        self._pause_event.set()  # Initial state is not paused
         self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.ciadpi_path = os.path.join(self.base_dir, "vendor", "byedpi", "ciadpi")
 
     def cancel(self):
         self._is_cancelled = True
+        self.resume() # Unblock if paused
+
+    def pause(self):
+        self._pause_event.clear()
+        
+    def resume(self):
+        self._pause_event.set()
 
     def get_free_port(self) -> int:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -85,6 +97,7 @@ class StrategyTesterThread(QThread):
         total_targets = len(self.targets)
         
         for s_idx, strategy in enumerate(self.strategies):
+            self._pause_event.wait()
             if self._is_cancelled:
                 break
                 
@@ -102,13 +115,14 @@ class StrategyTesterThread(QThread):
             passed_count = 0
             timeout_count = 0
             error_count = 0
-            total_success_time = 0.0
+            success_durations = []
             
             try:
                 proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 time.sleep(0.5) # Wait for proxy to bind
                 
                 for t_idx, target in enumerate(self.targets):
+                    self._pause_event.wait()
                     if self._is_cancelled:
                         break
                         
@@ -118,7 +132,7 @@ class StrategyTesterThread(QThread):
                     
                     if status == "Success":
                         passed_count += 1
-                        total_success_time += duration
+                        success_durations.append(duration)
                     elif status == "Timeout":
                         timeout_count += 1
                     else:
@@ -137,8 +151,9 @@ class StrategyTesterThread(QThread):
             if self._is_cancelled:
                 break
                 
-            avg_time = (total_success_time / passed_count) if passed_count > 0 else 0.0
-            self.strategy_finished.emit(strategy["id"], passed_count, total_targets, avg_time, timeout_count, error_count)
+            avg_time = statistics.mean(success_durations) if success_durations else 0.0
+            median_time = statistics.median(success_durations) if success_durations else 0.0
+            self.strategy_finished.emit(strategy["id"], passed_count, total_targets, avg_time, median_time, timeout_count, error_count)
             
         self.progress.emit(total_strategies, total_strategies, total_targets, total_targets)
         self.finished.emit()

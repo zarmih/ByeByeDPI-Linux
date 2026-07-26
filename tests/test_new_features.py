@@ -5,7 +5,6 @@ import pytest
 from unittest.mock import patch, MagicMock
 from PySide6.QtWidgets import QApplication
 
-# Initialize app for tests that need it (QSettings)
 @pytest.fixture(scope="session")
 def qapp():
     app = QApplication.instance()
@@ -13,23 +12,24 @@ def qapp():
         app = QApplication([])
     yield app
 
-def test_diagnostics():
+def test_diagnostics(qapp):
     from src.diagnostics import DiagnosticsDialog
     
     dialog = DiagnosticsDialog()
     with patch("os.path.exists", return_value=True), \
+         patch("os.path.getsize", return_value=1024), \
          patch("os.access", return_value=True), \
          patch("shutil.which", return_value="/usr/bin/curl"), \
+         patch("subprocess.run") as mock_run, \
          patch("socket.socket") as mock_socket:
         
-        # Test all pass
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         assert dialog.run_diagnostics("/fake/ciadpi") == True
         
-        # Test missing binary
         with patch("os.path.exists", return_value=False):
             assert dialog.run_diagnostics("/fake/ciadpi") == False
             
-def test_gnome_proxy_adapter():
+def test_gnome_proxy_adapter(qapp):
     from src.gnome_proxy import GnomeProxyAdapter
     
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -39,13 +39,11 @@ def test_gnome_proxy_adapter():
              patch("PySide6.QtCore.QStandardPaths.writableLocation", return_value=tmpdir), \
              patch("subprocess.run") as mock_run:
              
-            # Create adapter
             adapter = GnomeProxyAdapter()
             adapter.journal_file = journal_file
             
             assert adapter.is_available() == True
             
-            # Setup mock for _get_setting
             def mock_get_setting(*args, **kwargs):
                 cmd = args[0]
                 if cmd[0] == "gsettings" and cmd[1] == "get":
@@ -56,26 +54,21 @@ def test_gnome_proxy_adapter():
                 
             mock_run.side_effect = mock_get_setting
             
-            # Test apply proxy
             adapter.apply_proxy(1080)
             
-            # Check journal was created
             assert os.path.exists(journal_file)
             with open(journal_file, "r") as f:
                 state = json.load(f)
-                assert state["mode"] == "'none'"
+                assert state.get("version") == 1
+                assert state.get("settings", {}).get("org.gnome.system.proxy::mode") == "'none'"
                 
-            # Test restore
+            mock_run.side_effect = lambda *args, **kwargs: MagicMock(returncode=0, stdout="")
             adapter.restore_proxy()
-            assert not os.path.exists(journal_file) # should be removed after restore
+            assert not os.path.exists(journal_file)
 
 def test_install_scripts_dry_run():
-    # We can't really run them safely without modifying ~/.local, 
-    # but we can check if they are syntactically valid bash scripts.
     import subprocess
-    
     res = subprocess.run(["bash", "-n", "scripts/install-user.sh"])
     assert res.returncode == 0
-    
     res = subprocess.run(["bash", "-n", "scripts/uninstall-user.sh"])
     assert res.returncode == 0

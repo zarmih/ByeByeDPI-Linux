@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 from update_manager import TARGET_ASSETS
@@ -31,7 +32,7 @@ def test_strategy_cli_dry_run_does_not_change_active_data(tmp_path):
     before = digest(active)
     result = subprocess.run(
         [
-            ".venv/bin/python",
+            sys.executable,
             "scripts/update_strategies.py",
             "--dry-run",
             "--local-dir",
@@ -52,7 +53,7 @@ def test_targets_cli_exports_validated_candidate(tmp_path):
     output = tmp_path / "candidate-targets.json"
     result = subprocess.run(
         [
-            ".venv/bin/python",
+            sys.executable,
             "scripts/update_test_targets.py",
             "--local-dir",
             str(fixture),
@@ -73,7 +74,7 @@ def test_targets_cli_exports_validated_candidate(tmp_path):
 def test_cli_rejects_unsafe_proxy_without_network():
     result = subprocess.run(
         [
-            ".venv/bin/python",
+            sys.executable,
             "scripts/update_strategies.py",
             "--dry-run",
             "--proxy",

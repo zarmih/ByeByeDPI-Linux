@@ -65,6 +65,13 @@ X-GNOME-Autostart-enabled=true
             
         os.chmod(tmp_path, 0o644)
         os.replace(tmp_path, path)
+        
+        try:
+            dir_fd = os.open(os.path.dirname(path), os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0))
+            os.fsync(dir_fd)
+            os.close(dir_fd)
+        except Exception:
+            pass
         return True, "Autostart enabled."
     except Exception as e:
         return False, f"Failed to create autostart file: {e}"

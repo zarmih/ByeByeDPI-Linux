@@ -72,7 +72,7 @@ def run_smoke_test():
     while dialog.tester_thread is not None:
         app.processEvents()
         time.sleep(0.1)
-        if time.time() - start > 10:
+        if time.time() - start > 4:
             print("Tester thread timed out!")
             dialog.stop_test()
             break
@@ -80,8 +80,8 @@ def run_smoke_test():
     # Check results in table
     passed_count = None
     for i in range(dialog.table.rowCount()):
-        if dialog.table.item(i, 3).text() != "-":
-            passed_count = dialog.table.item(i, 3).text()
+        if dialog.table.item(i, 4).text() != "-":
+            passed_count = dialog.table.item(i, 4).text()
             break
             
     print("Passed:", passed_count)

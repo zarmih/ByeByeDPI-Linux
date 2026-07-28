@@ -10,7 +10,18 @@ from PySide6.QtWidgets import QApplication
 from main import MainWindow
 
 def run_smoke_test():
-    app = QApplication(sys.argv)
+    import faulthandler
+    faulthandler.enable()
+    import os
+    os.environ["PYTEST_CURRENT_TEST"] = "smoke"
+    from PySide6.QtWidgets import QMessageBox
+    QMessageBox.information = lambda *args, **kwargs: print(f"MOCK info: {args}")
+    QMessageBox.warning = lambda *args, **kwargs: print(f"MOCK warning: {args}")
+    QMessageBox.critical = lambda *args, **kwargs: print(f"MOCK critical: {args}")
+
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
     window = MainWindow()
     
     # Check initial state
@@ -32,10 +43,6 @@ def run_smoke_test():
     
     # Check proxy via the button (simulated)
     print("Checking proxy...")
-    from PySide6.QtWidgets import QMessageBox
-    QMessageBox.information = lambda *args, **kwargs: print(f"MOCK info: {args}")
-    QMessageBox.warning = lambda *args, **kwargs: print(f"MOCK warning: {args}")
-    QMessageBox.critical = lambda *args, **kwargs: print(f"MOCK critical: {args}")
     window.check_proxy()
     
     print("Stopping process...")
@@ -52,6 +59,8 @@ def run_smoke_test():
     assert stopped, "Process didn't stop or label didn't update to Stopped"
     
     print("GUI smoke test passed.")
+    window.close()
+    app.processEvents()
 
 if __name__ == "__main__":
     run_smoke_test()

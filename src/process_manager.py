@@ -126,7 +126,7 @@ class ProcessManager:
 
         self._emit_output("Stopping process...")
         self._stop_event.set()
-        
+
         if self.process:
             try:
                 self.process.terminate()
@@ -137,6 +137,8 @@ class ProcessManager:
                 self.process.wait()
             except Exception as e:
                 self._emit_output(f"Error while stopping process: {e}")
+            if self.process.stdout:
+                self.process.stdout.close()
 
         self.process = None
         if self.on_stop:
@@ -151,16 +153,16 @@ class ProcessManager:
     def _read_output(self):
         if not self.process or not self.process.stdout:
             return
-            
+
         for line in iter(self.process.stdout.readline, ''):
             if line:
                 self._emit_output(line.rstrip('\n'))
             if self._stop_event.is_set():
                 break
-                
+
         if self.process:
             self.process.poll()
-            
+
         if not self._stop_event.is_set():
             self._emit_output("Process exited unexpectedly.")
             if self.on_stop:

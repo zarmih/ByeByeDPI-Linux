@@ -131,3 +131,5 @@ for directory in \
 done
 
 echo "ByeByeDPI Linux uninstalled."
+echo "Note: System-wide TUN helper (if installed) was not removed."
+echo "To remove it, run: sudo scripts/uninstall-tun-helper.sh"

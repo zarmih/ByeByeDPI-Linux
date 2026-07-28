@@ -1,3 +1,6 @@
 [submodule "vendor/byedpi"]
 	path = vendor/byedpi
 	url = https://github.com/hufrea/byedpi
+[submodule "vendor/hev-socks5-tunnel"]
+	path = vendor/hev-socks5-tunnel
+	url = https://github.com/heiher/hev-socks5-tunnel.git

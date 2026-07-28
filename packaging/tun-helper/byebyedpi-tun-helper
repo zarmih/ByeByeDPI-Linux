@@ -1,0 +1,578 @@
+#!/usr/bin/env python3
+import sys
+import os
+import json
+import time
+import fcntl
+import re
+import ipaddress
+import pwd
+import stat
+import subprocess
+
+class TunHelperError(Exception): pass
+class TunHelperSecurityError(TunHelperError): pass
+class TunHelperConfigError(TunHelperError): pass
+
+def _resolve_tool(tool_name: str) -> str:
+    for p in ["/sbin", "/usr/sbin", "/bin", "/usr/bin"]:
+        tp = os.path.join(p, tool_name)
+        if os.path.isfile(tp) and os.access(tp, os.X_OK):
+            return tp
+    raise TunHelperSecurityError(f"Tool {tool_name} not found in safe paths")
+
+def get_ip() -> str: return _resolve_tool("ip")
+def get_sysctl() -> str: return _resolve_tool("sysctl")
+
+JOURNAL_DIR = "/run/byebyedpi-linux"
+JOURNAL_FILE = f"{JOURNAL_DIR}/tun_recovery_journal.json"
+LOCK_FILE = f"{JOURNAL_DIR}/tun_helper.lock"
+
+class TunHelper:
+    def __init__(self, runner=None, sleep_fn=None, watchdog_launcher=None, _exit_fn=None, probe_fn=None):
+        self.runner = runner or subprocess.run
+        import time
+        self.sleep_fn = sleep_fn or time.sleep
+        self.watchdog_launcher = watchdog_launcher or self._default_watchdog_launcher
+        self._exit_fn = _exit_fn or os._exit
+        self.probe_fn = probe_fn or self._default_probe_fn
+        self.lock_fd = -1
+        self.ip_path = get_ip()
+        self.sysctl_path = get_sysctl()
+
+    def close_lock(self):
+        if self.lock_fd != -1:
+            try: os.close(self.lock_fd)
+            except OSError: pass
+            self.lock_fd = -1
+
+    def _default_watchdog_launcher(self, session_id):
+        my_path = os.path.abspath(__file__)
+        subprocess.Popen(
+            [my_path, "_watchdog", session_id],
+            close_fds=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env={"__TUN_HELPER_INTERNAL_WATCHDOG": "1"}
+        )
+
+    def _default_probe_fn(self) -> dict:
+        try:
+            res = self.runner([self.ip_path, "-j", "-4", "route", "show", "default"], capture_output=True, text=True, check=False)
+            if res.returncode != 0: return {}
+            r1 = json.loads(res.stdout)
+            if not r1: return {}
+            gw = r1[0].get("gateway")
+            dev = r1[0].get("dev")
+            if not gw or not dev: return {}
+            
+            res = self.runner([self.ip_path, "-j", "-4", "route", "get", gw], capture_output=True, text=True, check=False)
+            if res.returncode != 0: return {}
+            src = json.loads(res.stdout)[0].get("prefsrc")
+            
+            res = self.runner([self.ip_path, "-j", "-4", "route", "show", "dev", dev], capture_output=True, text=True, check=False)
+            if res.returncode != 0: return {}
+            r3 = json.loads(res.stdout)
+            prefixes = []
+            for r in r3:
+                if r.get("scope") == "link" or r.get("protocol") == "kernel":
+                    dst = r.get("dst")
+                    if dst and dst != "default":
+                        prefixes.append(dst)
+            prefixes.sort()
+            return {"gateway_ip": gw, "physical_interface": dev, "physical_ip": src, "connected_prefixes": prefixes}
+        except Exception:
+            return {}
+
+    def _ensure_dir(self):
+        try:
+            os.makedirs(JOURNAL_DIR, mode=0o700, exist_ok=True)
+            st = os.lstat(JOURNAL_DIR)
+            if not stat.S_ISDIR(st.st_mode) or st.st_uid != 0 or (st.st_mode & 0o777) != 0o700:
+                raise TunHelperSecurityError("Unsafe directory permissions or symlink")
+        except OSError as e:
+            raise TunHelperSecurityError(f"Failed to create run directory: {e}")
+
+    def acquire_lock(self):
+        self._ensure_dir()
+        try:
+            self.lock_fd = os.open(LOCK_FILE, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC | os.O_NOFOLLOW, 0o600)
+            st = os.fstat(self.lock_fd)
+            if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or (st.st_mode & 0o777) != 0o600:
+                raise TunHelperSecurityError("Unsafe lock file permissions or symlink")
+            fcntl.flock(self.lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except Exception as e:
+            if self.lock_fd != -1:
+                os.close(self.lock_fd)
+                self.lock_fd = -1
+            raise TunHelperError(f"Failed to acquire lock: {e}")
+
+    def release_lock(self):
+        if self.lock_fd != -1:
+            try:
+                fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
+                os.close(self.lock_fd)
+            except OSError:
+                pass
+            self.lock_fd = -1
+
+    def read_journal(self) -> dict:
+        if not os.path.exists(JOURNAL_FILE):
+            return {}
+        try:
+            st = os.lstat(JOURNAL_FILE)
+            if not stat.S_ISREG(st.st_mode) or st.st_uid != 0 or (st.st_mode & 0o777) != 0o600:
+                raise TunHelperSecurityError("Unsafe journal permissions or symlink")
+            if st.st_size > 65536 or st.st_size == 0:
+                raise TunHelperSecurityError("Journal file empty or too large")
+                
+            with open(JOURNAL_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                raise TunHelperSecurityError("Journal must be a dict")
+            
+            # strict validation
+            if "version" not in data or data["version"] != 1:
+                raise TunHelperSecurityError("Invalid journal version")
+            if "state" not in data or data["state"] not in ("PREPARING", "PREPARED", "ACTIVATING", "ACTIVE", "ROLLING_BACK", "ROLLBACK_FAILED"):
+                raise TunHelperSecurityError("Invalid state in journal")
+            if not isinstance(data.get("plan"), dict) or not isinstance(data.get("created_objects"), list):
+                raise TunHelperSecurityError("Invalid plan or created_objects type in journal")
+            if "pending_operation" not in data:
+                raise TunHelperSecurityError("Missing pending_operation in journal")
+                
+            return data
+        except json.JSONDecodeError:
+            raise TunHelperSecurityError("Corrupt journal: invalid JSON")
+        except UnicodeDecodeError:
+            raise TunHelperSecurityError("Corrupt journal: invalid UTF8")
+        except Exception as e:
+            raise TunHelperSecurityError(f"Corrupt journal: {e}")
+
+    def write_journal(self, state, plan, session_id, owner_uid, cpid, cstart, created, pending=None):
+        self._ensure_dir()
+        data = {
+            "version": 1,
+            "state": state,
+            "plan": plan,
+            "session_id": session_id,
+            "owner_uid": owner_uid,
+            "controller_pid": cpid,
+            "controller_starttime": cstart,
+            "created_objects": created,
+            "pending_operation": pending
+        }
+        tmp_jf = JOURNAL_FILE + ".tmp"
+        try:
+            fd = os.open(tmp_jf, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_CLOEXEC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_jf, JOURNAL_FILE)
+            dir_fd = os.open(JOURNAL_DIR, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except Exception as e:
+            if os.path.exists(tmp_jf):
+                try: os.unlink(tmp_jf)
+                except OSError: pass
+            raise TunHelperError(f"Failed to write journal: {e}")
+
+    def delete_journal(self):
+        if not os.path.exists(JOURNAL_FILE):
+            return
+        st = os.lstat(JOURNAL_FILE)
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != 0:
+            raise TunHelperSecurityError("Unsafe journal file")
+        os.unlink(JOURNAL_FILE)
+        dir_fd = os.open(JOURNAL_DIR, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+
+    def validate_plan(self, p: dict) -> dict:
+        if not isinstance(p, dict): raise TunHelperConfigError("Plan must be a dict")
+        allowed_keys = {"tun_interface", "table_id", "tun_ip", "physical_ip", "gateway_ip", 
+                        "connected_prefixes", "rule_priority_bypass_physical", 
+                        "rule_priority_bypass_lan", "rule_priority_gateway", "rule_priority_catch_all"}
+        if set(p.keys()) != allowed_keys: raise TunHelperConfigError("Exact plan keys required")
+        if p["tun_interface"] != "byedpi0": raise TunHelperConfigError("tun_interface must be byedpi0")
+        if p["table_id"] != 10808: raise TunHelperConfigError("table_id must be 10808")
+        if p["tun_ip"] != "198.18.0.1": raise TunHelperConfigError("tun_ip must be 198.18.0.1")
+
+        for ip_field in ["tun_ip", "physical_ip", "gateway_ip"]:
+            val = p[ip_field]
+            if not isinstance(val, str) or ";" in val or "&" in val or "|" in val:
+                raise TunHelperConfigError(f"Shell injection detected in {ip_field}")
+            try: p[ip_field] = str(ipaddress.IPv4Address(val))
+            except Exception: raise TunHelperConfigError(f"Invalid {ip_field}")
+
+        if not isinstance(p["connected_prefixes"], list) or len(p["connected_prefixes"]) > 64:
+            raise TunHelperConfigError("connected_prefixes must be list (max 64)")
+        
+        normalized_prefs = []
+        for pref in p["connected_prefixes"]:
+            if not isinstance(pref, str) or ";" in pref or "&" in pref or "|" in pref:
+                raise TunHelperConfigError(f"Shell injection in prefix {pref}")
+            try: normalized_prefs.append(str(ipaddress.IPv4Network(pref, strict=False)))
+            except Exception: raise TunHelperConfigError(f"Invalid prefix: {pref}")
+        if len(set(normalized_prefs)) != len(normalized_prefs):
+            raise TunHelperConfigError("Duplicate prefixes not allowed")
+        p["connected_prefixes"] = normalized_prefs
+
+        if p["rule_priority_bypass_physical"] != 1000: raise TunHelperConfigError("bypass_physical must be 1000")
+        if p["rule_priority_bypass_lan"] != 1100: raise TunHelperConfigError("bypass_lan must be 1100")
+        if p["rule_priority_gateway"] != 1190: raise TunHelperConfigError("bypass_gateway must be 1190")
+        if p["rule_priority_catch_all"] != 2000: raise TunHelperConfigError("catch_all must be 2000")
+
+        return p
+
+    def validate_request(self, data: dict, pkexec_uid: str) -> tuple:
+        if not isinstance(data, dict): raise TunHelperConfigError("Request data must be dict")
+        plan = self.validate_plan(data.get("plan", {}))
+        owner_uid = data.get("owner_uid")
+        if not isinstance(owner_uid, int) or owner_uid == 0: raise TunHelperConfigError("owner_uid must be non-zero int")
+        if str(owner_uid) != pkexec_uid: raise TunHelperSecurityError("owner_uid mismatch with pkexec_uid")
+        try: pwd.getpwuid(owner_uid)
+        except KeyError: raise TunHelperConfigError("owner_uid does not exist")
+        cpid = data.get("controller_pid")
+        if not isinstance(cpid, int) or cpid <= 1: raise TunHelperConfigError("Invalid controller_pid")
+        cstart = data.get("controller_starttime")
+        if not isinstance(cstart, int) or cstart <= 0: raise TunHelperConfigError("Invalid controller_starttime")
+        sess = data.get("session_id")
+        if not isinstance(sess, str) or not re.match(r"^[0-9a-f]{32,64}$", sess): raise TunHelperConfigError("Invalid session_id format")
+        return plan, owner_uid, cpid, cstart, sess
+
+    def check_controller_alive(self, cpid: int, cstart: int) -> bool:
+        try:
+            with open(f"/proc/{cpid}/stat", "r") as f:
+                parts = f.read().split()
+                if len(parts) >= 22 and int(parts[21]) == cstart: return True
+        except OSError: pass
+        return False
+
+    def _execute_mut(self, cmd_args, obj_desc, journal_info):
+        state, plan, sess, owner_uid, cpid, cstart, created = journal_info
+        self.write_journal(state, plan, sess, owner_uid, cpid, cstart, created, pending=obj_desc)
+        try:
+            self.runner([self.ip_path] + cmd_args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError as e:
+            raise TunHelperError(f"Command failed: {cmd_args}") from e
+        created.append(obj_desc)
+        self.write_journal(state, plan, sess, owner_uid, cpid, cstart, created, pending=None)
+
+    def _check_conflicts(self, plan):
+        res = self.runner([self.ip_path, "-j", "link", "show", "byedpi0"], capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            raise TunHelperError("Interface byedpi0 already exists")
+        res = self.runner([self.ip_path, "-j", "-4", "route", "show", "table", "10808"], capture_output=True, text=True, check=False)
+        if res.returncode == 0 and json.loads(res.stdout):
+            raise TunHelperError("Table 10808 is not empty")
+        res = self.runner([self.ip_path, "-j", "-4", "rule", "show"], capture_output=True, text=True, check=False)
+        if res.returncode == 0:
+            rules = json.loads(res.stdout)
+            for rule in rules:
+                prio = rule.get("priority", 0)
+                if 0 < prio < 2000 and rule.get("table") != "local":
+                    raise TunHelperError(f"Conflicting rule with priority {prio} < 2000")
+
+    def prepare(self, data: dict, pkexec_uid: str):
+        plan, owner_uid, cpid, cstart, sess = self.validate_request(data, pkexec_uid)
+        if not self.check_controller_alive(cpid, cstart):
+            raise TunHelperConfigError("Controller process not alive or starttime mismatch")
+
+        self.acquire_lock()
+        journal = self.read_journal()
+        if journal and journal.get("state") in ("PREPARING", "PREPARED", "ACTIVATING", "ACTIVE"):
+            raise TunHelperConfigError("TUN is already active or prepared")
+
+        self._check_conflicts(plan)
+
+        created = []
+        ji = ["PREPARING", plan, sess, owner_uid, cpid, cstart, created]
+        self.write_journal(*ji)
+
+        try:
+            self._execute_mut(["tuntap", "add", "mode", "tun", "dev", plan["tun_interface"], "user", str(owner_uid)], {"type": "link", "dev": plan["tun_interface"]}, ji)
+            self._execute_mut(["addr", "add", f"{plan['tun_ip']}/15", "dev", plan["tun_interface"]], {"type": "addr", "ip": f"{plan['tun_ip']}/15", "dev": plan["tun_interface"]}, ji)
+            self._execute_mut(["link", "set", "dev", plan["tun_interface"], "up"], {"type": "link_up", "dev": plan["tun_interface"]}, ji)
+            
+            self._execute_mut(["rule", "add", "from", plan["physical_ip"], "lookup", "main", "priority", str(plan["rule_priority_bypass_physical"])],
+                {"type": "rule", "from": plan["physical_ip"], "lookup": "main", "priority": plan["rule_priority_bypass_physical"]}, ji)
+            
+            prio_lan = plan["rule_priority_bypass_lan"]
+            for p in plan["connected_prefixes"]:
+                self._execute_mut(["rule", "add", "to", p, "lookup", "main", "priority", str(prio_lan)],
+                    {"type": "rule", "to": p, "lookup": "main", "priority": prio_lan}, ji)
+                prio_lan += 1
+            
+            self._execute_mut(["rule", "add", "to", plan["gateway_ip"], "lookup", "main", "priority", str(plan["rule_priority_gateway"])],
+                {"type": "rule", "to": plan["gateway_ip"], "lookup": "main", "priority": plan["rule_priority_gateway"]}, ji)
+
+            ji[0] = "PREPARED"
+            self.write_journal(*ji)
+        except Exception:
+            self.rollback_internal()
+            raise
+
+        self.watchdog_launcher(sess)
+
+    def _watchdog_loop(self, cpid: int, cstart: int, plan: dict, session_id: str):
+        expected_gw = plan.get("gateway_ip")
+        expected_src = plan.get("physical_ip")
+        expected_prefixes = sorted(plan.get("connected_prefixes", []))
+
+        while True:
+            self.sleep_fn(2.0)
+            
+            try:
+                journal = self.read_journal()
+                if not journal:
+                    self._exit_fn(0)
+                if journal.get("session_id") != session_id:
+                    self._exit_fn(0)
+                if journal.get("state") not in ("PREPARED", "ACTIVATING", "ACTIVE"):
+                    self._exit_fn(0)
+            except TunHelperSecurityError:
+                self._exit_fn(0)
+                
+            alive = self.check_controller_alive(cpid, cstart)
+            drift = False
+            
+            if alive:
+                snap = self.probe_fn()
+                if snap:
+                    if snap.get("gateway_ip") != expected_gw or \
+                       snap.get("physical_ip") != expected_src or \
+                       snap.get("connected_prefixes") != expected_prefixes:
+                        drift = True
+                else:
+                    drift = True
+                    
+            if not alive or drift:
+                try:
+                    self.acquire_lock()
+                    journal = self.read_journal()
+                    if journal and journal.get("session_id") == session_id and journal.get("state") in ("PREPARED", "ACTIVATING", "ACTIVE"):
+                        self.rollback_internal()
+                except Exception:
+                    pass
+                finally:
+                    self.close_lock()
+                    self._exit_fn(0)
+
+    def activate(self, data: dict, pkexec_uid: str):
+        self.acquire_lock()
+        journal = self.read_journal()
+        if not journal or journal.get("state") != "PREPARED":
+            raise TunHelperConfigError("Not in PREPARED state")
+        if str(journal["owner_uid"]) != pkexec_uid or journal["session_id"] != data.get("session_id"):
+            raise TunHelperSecurityError("Authorization failed for activate")
+            
+        plan = journal["plan"]
+        created = journal["created_objects"]
+        ji = ["ACTIVATING", plan, journal["session_id"], journal["owner_uid"], journal["controller_pid"], journal["controller_starttime"], created]
+        self.write_journal(*ji)
+
+        try:
+            self._execute_mut(["route", "add", "default", "dev", plan["tun_interface"], "table", str(plan["table_id"])],
+                {"type": "route", "dest": "default", "dev": plan["tun_interface"], "table": plan["table_id"]}, ji)
+            
+            self._execute_mut(["rule", "add", "from", "all", "lookup", str(plan["table_id"]), "priority", str(plan["rule_priority_catch_all"])],
+                {"type": "rule", "from": "all", "lookup": str(plan["table_id"]), "priority": plan["rule_priority_catch_all"]}, ji)
+            
+            ji[0] = "ACTIVE"
+            self.write_journal(*ji)
+        except Exception:
+            self.rollback_internal()
+            raise
+
+    def _operation_exists(self, c: dict) -> bool:
+        try:
+            if c["type"] == "route":
+                res = self.runner([self.ip_path, "-j", "-4", "route", "show", "table", str(c["table"])], capture_output=True, text=True, check=False)
+                if res.returncode != 0: return False
+                routes = json.loads(res.stdout)
+                for r in routes:
+                    if r.get("dst") == c["dest"] and r.get("dev") == c["dev"]:
+                        return True
+                return False
+            elif c["type"] == "rule":
+                res = self.runner([self.ip_path, "-j", "-4", "rule", "show"], capture_output=True, text=True, check=False)
+                if res.returncode != 0: return False
+                rules = json.loads(res.stdout)
+                for r in rules:
+                    if str(r.get("priority")) == str(c["priority"]) and str(r.get("table")) == str(c["lookup"]):
+                        return True
+                return False
+            elif c["type"] == "link":
+                res = self.runner([self.ip_path, "-j", "link", "show", c["dev"]], capture_output=True, text=True, check=False)
+                if res.returncode != 0: return False
+                return bool(json.loads(res.stdout))
+        except Exception:
+            return True # on error assume it exists to prevent unsafe deletion
+        return False
+
+    def rollback_internal(self):
+        journal = self.read_journal()
+        if not journal: return
+        
+        created = journal.get("created_objects", [])
+        pending = journal.get("pending_operation")
+        
+        candidates = list(created)
+        if pending:
+            candidates.append(pending)
+            
+        candidates.reverse()
+        
+        def sort_key(c):
+            if c["type"] == "rule" and c.get("from") == "all": return 0
+            if c["type"] == "route": return 1
+            if c["type"] == "rule": return 2
+            if c["type"] == "addr": return 3
+            if c["type"] == "link_up": return 4
+            if c["type"] == "link": return 5
+            return 99
+
+        candidates.sort(key=sort_key)
+        
+        ji = ["ROLLING_BACK", journal["plan"], journal["session_id"], journal["owner_uid"], journal["controller_pid"], journal["controller_starttime"], journal.get("created_objects", [])]
+        self.write_journal(*ji, pending=pending)
+
+        failed = False
+        
+        for c in candidates:
+            cmd = []
+            if c["type"] == "route":
+                cmd = ["route", "del", c["dest"], "dev", c["dev"], "table", str(c["table"])]
+            elif c["type"] == "rule":
+                cmd = ["rule", "del"]
+                if "from" in c: cmd.extend(["from", c["from"]])
+                if "to" in c: cmd.extend(["to", c["to"]])
+                cmd.extend(["lookup", str(c["lookup"]), "priority", str(c["priority"])])
+            elif c["type"] == "link":
+                cmd = ["link", "delete", c["dev"]]
+            else:
+                if c in created: created.remove(c)
+                if c == pending: pending = None
+                continue
+
+            self.runner([self.ip_path] + cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+            
+            if self._operation_exists(c):
+                failed = True
+            else:
+                if c in created: created.remove(c)
+                if c == pending: pending = None
+                self.write_journal(*ji, pending=pending)
+
+        if not failed and not created and not pending:
+            self.delete_journal()
+        else:
+            ji[0] = "ROLLBACK_FAILED"
+            self.write_journal(*ji, pending=pending)
+            raise TunHelperError("Rollback incomplete or failed")
+
+    def rollback(self, data: dict, pkexec_uid: str, is_recover: bool = False):
+        self.acquire_lock()
+        journal = self.read_journal()
+        if not journal: return
+        if not is_recover:
+            if str(journal["owner_uid"]) != pkexec_uid or journal["session_id"] != data.get("session_id"):
+                raise TunHelperSecurityError("Authorization failed for rollback")
+        else:
+            if pkexec_uid is not None and str(journal["owner_uid"]) != pkexec_uid:
+                raise TunHelperSecurityError("Authorization failed for recover")
+        self.rollback_internal()
+
+    def status(self, data: dict, pkexec_uid: str):
+        journal = self.read_journal()
+        if not journal:
+            print(json.dumps({"state": "NONE", "version": 1}))
+            return
+        is_owner = (str(journal.get("owner_uid")) == pkexec_uid and journal.get("session_id") == data.get("session_id"))
+        out = {"version": 1, "state": journal.get("state", "UNKNOWN"), "session_owned": is_owner}
+        print(json.dumps(out))
+
+def main():
+    if os.geteuid() != 0: sys.exit("Error: Helper must be run as root.")
+    if os.environ.get("__TUN_HELPER_INTERNAL_WATCHDOG") == "1": sys.exit(0)
+    pkexec_uid = os.environ.get("PKEXEC_UID")
+    my_path = os.path.abspath(__file__)
+    if my_path != "/usr/libexec/byebyedpi-linux/tun-helper" and "pytest" not in sys.modules and not os.environ.get("PYTEST_CURRENT_TEST"):
+        try:
+            st = os.lstat(my_path)
+            if st.st_uid != 0 or (st.st_mode & 0o022) != 0: sys.exit("Error: Binary is not owned by root or is world-writable.")
+        except Exception as e: sys.exit(f"Error: {e}")
+    action = sys.argv[1] if len(sys.argv) > 1 else ""
+    if action not in ("recover",) and pkexec_uid is None: sys.exit("Error: Must be invoked via pkexec.")
+    try:
+        data = {}
+        if not sys.stdin.isatty():
+            try:
+                c = sys.stdin.read().strip()
+                if c: data = json.loads(c)
+            except Exception: pass
+        helper = TunHelper()
+        if action == "prepare": helper.prepare(data, pkexec_uid)
+        elif action == "activate": helper.activate(data, pkexec_uid)
+        elif action == "rollback": helper.rollback(data, pkexec_uid, False)
+        elif action == "recover": helper.rollback(data, pkexec_uid, True)
+        elif action == "status": helper.status(data, pkexec_uid)
+        else: sys.exit(f"Unknown action: {action}")
+    except Exception as e:
+        sys.exit(f"Helper failed: {str(e)}")
+
+if __name__ == "__main__":
+    if os.geteuid() != 0:
+        print("This helper must be run as root", file=sys.stderr)
+        sys.exit(1)
+
+    if len(sys.argv) >= 3 and sys.argv[1] == "_watchdog":
+        sess = sys.argv[2]
+        helper = TunHelper()
+        try:
+            journal = helper.read_journal()
+            if not journal or journal.get("session_id") != sess:
+                sys.exit(0)
+            helper._watchdog_loop(journal["controller_pid"], journal["controller_starttime"], journal["plan"], sess)
+        except Exception:
+            pass
+        sys.exit(0)
+    import argparse
+    parser = argparse.ArgumentParser(description="ByeByeDPI TUN Helper")
+    parser.add_argument("action", choices=["prepare", "activate", "rollback", "version"])
+    args = parser.parse_args()
+    
+    if args.action == "version":
+        print(json.dumps({"version": 1}))
+        sys.exit(0)
+        
+    try:
+        data = json.load(sys.stdin)
+    except json.JSONDecodeError:
+        print("Invalid JSON input", file=sys.stderr)
+        sys.exit(1)
+        
+    pkexec_uid = os.environ.get("PKEXEC_UID")
+    
+    helper = TunHelper()
+    try:
+        if args.action == "prepare":
+            helper.prepare(data, pkexec_uid)
+        elif args.action == "activate":
+            helper.activate(data, pkexec_uid)
+        elif args.action == "rollback":
+            helper.rollback(data, pkexec_uid, is_recover=False)
+    except Exception as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+    finally:
+        helper.close_lock()

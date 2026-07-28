@@ -21,6 +21,16 @@ The repository root `LICENSE` contains the GPL version 3 text used for ByeByeDPI
 
 The upstream MIT license is preserved at `vendor/byedpi/LICENSE` and must remain in source and binary distributions.
 
+## hev-socks5-tunnel
+
+- Project: `heiher/hev-socks5-tunnel`
+- Location: `vendor/hev-socks5-tunnel` Git submodule
+- Use: the `hev-socks5-tunnel` executable is built from this source for the TUN integration mode
+- License: MIT
+
+The upstream MIT license is preserved at `vendor/hev-socks5-tunnel/LICENSE` and must remain in source and binary distributions.
+
+
 ## PySide6 / Qt for Python
 
 PySide6 is installed as a runtime dependency and is not copied into this source repository. Qt for Python is distributed by its copyright holders under its published open-source and commercial licensing terms. Installers download it from the configured Python package index unless an offline package source is supplied.

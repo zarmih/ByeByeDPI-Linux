@@ -22,6 +22,15 @@ def start_mock_server(port):
     return httpd
 
 def run_smoke_test():
+    import faulthandler
+    faulthandler.enable()
+    import os
+    os.environ["PYTEST_CURRENT_TEST"] = "smoke"
+    from PySide6.QtWidgets import QMessageBox
+    QMessageBox.information = lambda *args, **kwargs: print(f"MOCK info: {args}")
+    QMessageBox.warning = lambda *args, **kwargs: print(f"MOCK warning: {args}")
+    QMessageBox.critical = lambda *args, **kwargs: print(f"MOCK critical: {args}")
+
     app = QApplication.instance()
     if not app:
         app = QApplication(sys.argv)
@@ -40,11 +49,11 @@ def run_smoke_test():
 
     print("Starting MainWindow...")
     window = MainWindow()
-    
+
     print("Opening StrategiesDialog...")
     dialog = StrategiesDialog(window)
     dialog.strategy_selected.connect(window.on_strategy_selected)
-    
+
     # Inject a mock target
     dialog.target_groups = [{
         "group_id": "mock",
@@ -64,10 +73,10 @@ def run_smoke_test():
 
     # Select strategy 1
     dialog.table.selectRow(0)
-    
+
     print("Testing StrategyTesterThread...")
     dialog.test_selected()
-    
+
     start = time.time()
     while dialog.tester_thread is not None:
         app.processEvents()
@@ -83,16 +92,21 @@ def run_smoke_test():
         if dialog.table.item(i, 3).text() != "-":
             passed_count = dialog.table.item(i, 3).text()
             break
-            
+
     print("Passed:", passed_count)
     assert passed_count == "1"
-    
+
     from strategies_dialog import StrategyDetailsDialog
     print("Testing Details Dialog...")
     details = StrategyDetailsDialog("strategy_1", dialog.test_results.get("strategy_1", []), dialog.targets_dict, dialog)
     details.show()
     app.processEvents()
-    
+
+    details.close()
+    dialog.close()
+    window.close()
+    app.processEvents()
+
     httpd.shutdown()
     print("Library GUI smoke test passed.")
 

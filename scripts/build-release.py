@@ -19,6 +19,7 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 SUBMODULE = ROOT / "vendor" / "byedpi"
+HEV_SUBMODULE = ROOT / "vendor" / "hev-socks5-tunnel"
 DEFAULT_OUTPUT = ROOT / "dist"
 EXCLUDED_PREFIXES = (
     ".git/",
@@ -28,6 +29,8 @@ EXCLUDED_PREFIXES = (
     ".pytest_cache/",
     ".mypy_cache/",
     ".ruff_cache/",
+    "vendor/hev-socks5-tunnel/bin/",
+    "vendor/hev-socks5-tunnel/obj/"
 )
 REQUIRED_RELEASE_FILES = (
     "LICENSE",
@@ -98,6 +101,8 @@ def copy_entry(source: Path, destination: Path) -> None:
         destination.symlink_to(os.readlink(source))
     elif source.is_file():
         shutil.copy2(source, destination)
+    elif source.is_dir():
+        pass # Skip submodule mount points
     else:
         raise ReleaseError(f"Tracked entry is missing or unsupported: {source}")
 
@@ -105,7 +110,7 @@ def copy_entry(source: Path, destination: Path) -> None:
 def copy_repository(staging_root: Path, *, include_untracked: bool) -> int:
     copied = 0
     for relative in git_paths(ROOT, include_untracked=include_untracked):
-        if relative == "vendor/byedpi" or excluded(relative):
+        if relative == "vendor/byedpi" or relative == "vendor/hev-socks5-tunnel" or excluded(relative):
             continue
         source = ROOT / relative
         if not source.exists() and not source.is_symlink():
@@ -115,11 +120,24 @@ def copy_repository(staging_root: Path, *, include_untracked: bool) -> int:
 
     if not (SUBMODULE / ".git").exists() and not (SUBMODULE / "Makefile").is_file():
         raise ReleaseError("vendor/byedpi submodule is missing; clone with --recurse-submodules")
+
+    if not HEV_SUBMODULE.exists() or not (HEV_SUBMODULE / ".git").exists():
+        raise ReleaseError("vendor/hev-socks5-tunnel submodule is missing; clone with --recurse-submodules")
     for relative in git_paths(SUBMODULE, include_untracked=False):
         source = SUBMODULE / relative
         if not source.exists() and not source.is_symlink():
             continue
         copy_entry(source, staging_root / "vendor" / "byedpi" / relative)
+        copied += 1
+
+    hev_tracked = run_git(["ls-files", "--recurse-submodules", "-z"], cwd=HEV_SUBMODULE).split("\0")
+    for relative in hev_tracked:
+        if not relative:
+            continue
+        source = HEV_SUBMODULE / relative
+        if not source.exists() and not source.is_symlink():
+            continue
+        copy_entry(source, staging_root / "vendor" / "hev-socks5-tunnel" / relative)
         copied += 1
     return copied
 
@@ -239,7 +257,8 @@ def main() -> int:
     output_dir = Path(args.output_dir).expanduser().resolve()
     status = run_git(["status", "--porcelain", "--untracked-files=normal"])
     submodule_status = run_git(["status", "--porcelain", "--untracked-files=no"], cwd=SUBMODULE)
-    dirty = bool(status or submodule_status)
+    hev_status = run_git(["status", "--porcelain", "--untracked-files=no"], cwd=HEV_SUBMODULE)
+    dirty = bool(status or submodule_status or hev_status)
     if dirty and not args.allow_dirty:
         raise ReleaseError("Working tree is dirty; commit changes or pass --allow-dirty")
 

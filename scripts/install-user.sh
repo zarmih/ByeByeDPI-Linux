@@ -58,6 +58,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 [DRY-RUN] Prefix: $PREFIX
 [DRY-RUN] Validate Python >= 3.10 and venv support
 [DRY-RUN] Build vendor/byedpi/ciadpi with make when missing
+[DRY-RUN] Build vendor/hev-socks5-tunnel with make when missing
 [DRY-RUN] Copy application to $APP_DIR (excluding .git, .venv, caches and test artifacts)
 [DRY-RUN] Create venv and install requirements-runtime.txt (uv acceleration if available)
 [DRY-RUN] Create launcher: $LAUNCHER
@@ -84,6 +85,17 @@ if [ ! -x "$CIADPI" ]; then
 fi
 [ -x "$CIADPI" ] || { echo "Error: ciadpi build did not produce an executable" >&2; exit 1; }
 
+HEV_TUNNEL="$SOURCE_DIR/vendor/hev-socks5-tunnel/bin/hev-socks5-tunnel"
+if [ ! -x "$HEV_TUNNEL" ]; then
+    echo "Building hev-socks5-tunnel..."
+    if [ ! -f "$SOURCE_DIR/vendor/hev-socks5-tunnel/Makefile" ]; then
+        echo "Initializing submodules for hev-socks5-tunnel..."
+        git -C "$SOURCE_DIR" submodule update --init --recursive vendor/hev-socks5-tunnel
+    fi
+    make -C "$SOURCE_DIR/vendor/hev-socks5-tunnel"
+fi
+[ -x "$HEV_TUNNEL" ] || { echo "Error: hev-socks5-tunnel build did not produce an executable" >&2; exit 1; }
+
 mkdir -p "$PREFIX/share" "$BIN_DIR" "$DESKTOP_DIR" "$ICON_DIR"
 rm -rf "$APP_DIR.tmp"
 mkdir -p "$APP_DIR.tmp"
@@ -95,7 +107,7 @@ source = Path(os.environ["SOURCE_DIR"])
 dest = Path(os.environ["DEST_DIR"])
 ignored_names = {
     ".git", ".github", ".venv", "__pycache__", ".pytest_cache",
-    ".mypy_cache", ".ruff_cache", "tests",
+    ".mypy_cache", ".ruff_cache", "tests", "bin", "obj"
 }
 for item in source.iterdir():
     if item.name in ignored_names:
@@ -106,7 +118,7 @@ for item in source.iterdir():
             item,
             target,
             ignore=shutil.ignore_patterns(
-                ".git", "__pycache__", "*.pyc", "*.pyo", ".pytest_cache"
+                ".git", "__pycache__", "*.pyc", "*.pyo", ".pytest_cache", "bin", "obj"
             ),
         )
     else:
@@ -152,3 +164,7 @@ fi
 
 echo "ByeByeDPI Linux installed successfully."
 echo "Launcher: $LAUNCHER"
+echo ""
+echo "Note: To use the System-wide TUN mode, you must explicitly install the root helper."
+echo "  Run the helper installer as root:"
+echo "  sudo $SOURCE_DIR/scripts/install-tun-helper.sh"

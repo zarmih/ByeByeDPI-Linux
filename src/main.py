@@ -15,6 +15,7 @@ from process_manager import ProcessManager
 from diagnostics import DiagnosticsDialog
 from version import __version__
 from gnome_proxy import GnomeProxyAdapter
+from tun_controller import TunController, TunControllerError, TunRollbackError
 
 PROFILES = {
     "Profile 1 (Default)": "--disorder 1 --auto=torst --tlsrec 1+s",
@@ -44,6 +45,8 @@ class MainWindow(QMainWindow):
         self.pm.on_stop = self._on_process_stop
 
         self.gnome_proxy = GnomeProxyAdapter()
+        self.tun_controller = TunController()
+
 
         self.append_log_signal.connect(self.append_log)
         self.process_stopped_signal.connect(self.on_process_stopped)
@@ -52,6 +55,8 @@ class MainWindow(QMainWindow):
         self.init_tray()
         self.load_settings()
         self._recover_pending_proxy()
+        self.tun_controller.recover()
+
 
         if (
             not self.settings.value("first_run_done", False, type=bool)
@@ -84,13 +89,27 @@ class MainWindow(QMainWindow):
         layout.addLayout(top_layout)
 
         proxy_layout = QHBoxLayout()
-        self.proxy_checkbox = QCheckBox("Set system proxy via GNOME (gsettings)")
-        self.proxy_checkbox.setEnabled(self.gnome_proxy.is_available())
-        if not self.gnome_proxy.is_available():
-            self.proxy_checkbox.setToolTip("GNOME gsettings not available")
-        proxy_layout.addWidget(self.proxy_checkbox)
+        proxy_layout.addWidget(QLabel("Integration Mode:"))
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("None (SOCKS5 only)", "none")
+
+        if self.gnome_proxy.is_available():
+            self.mode_combo.addItem("GNOME System Proxy", "gnome")
+
+        tun_available, tun_reason = self.tun_controller.check_availability()
+        if tun_available:
+            self.mode_combo.addItem("System-wide VPN (TUN)", "tun")
+        else:
+            self.mode_combo.addItem(f"System-wide VPN (TUN) - Unavailable ({tun_reason})", "tun")
+            idx = self.mode_combo.findData("tun")
+            self.mode_combo.setItemData(idx, 0, Qt.UserRole - 1)
+
+        self.mode_combo.currentIndexChanged.connect(self.on_mode_changed)
+
+        proxy_layout.addWidget(self.mode_combo)
         proxy_layout.addStretch()
         layout.addLayout(proxy_layout)
+
 
         controls_layout = QHBoxLayout()
 
@@ -184,9 +203,11 @@ class MainWindow(QMainWindow):
         else:
             self.args_input.setText(PROFILES.get(profile, ""))
 
-        proxy_enabled = self.settings.value("gnome_proxy", False, type=bool)
-        if self.gnome_proxy.is_available():
-            self.proxy_checkbox.setChecked(proxy_enabled)
+        mode_val = self.settings.value("proxy_mode", "none")
+        idx = self.mode_combo.findData(mode_val)
+        if idx >= 0 and self.mode_combo.itemData(idx, Qt.UserRole - 1) != 0:
+            self.mode_combo.setCurrentIndex(idx)
+
 
     def save_settings(self):
         self.settings.setValue("geometry", self.saveGeometry())
@@ -200,7 +221,8 @@ class MainWindow(QMainWindow):
         else:
             self.settings.setValue("custom_args", PROFILES.get(self.profile_combo.currentText(), ""))
 
-        self.settings.setValue("gnome_proxy", self.proxy_checkbox.isChecked())
+        self.settings.setValue("proxy_mode", self.mode_combo.currentData())
+
         self.settings.sync()
 
     @staticmethod
@@ -280,12 +302,52 @@ class MainWindow(QMainWindow):
         self.profile_combo.setCurrentText("Custom")
         self.args_input.setText(args)
 
+    def on_mode_changed(self):
+        mode = self.mode_combo.currentData()
+        if mode == "tun":
+            QMessageBox.warning(self, "TUN Mode Warning", "TUN mode requires exclusive control over the network.\nCurrently, ONLY IPv4 is routed. IPv6 will bypass the VPN and may leak!")
+
     def start_process(self):
+        if getattr(self.tun_controller, "recovery_required", False):
+            QMessageBox.critical(self, "Critical Error", "TUN state is corrupted. Please recover manually.")
+            return
+
         if not os.path.exists(self.binary_path):
             QMessageBox.critical(self, "Error", f"Binary not found: {self.binary_path}\nPlease build it first.")
             return
 
         args = self.args_input.text().strip()
+
+        try:
+            args_list = shlex.split(args)
+        except ValueError as e:
+            QMessageBox.critical(self, "Error", f"Invalid arguments: {e}")
+            return
+
+        mode = self.mode_combo.currentData()
+        plan = None
+        if mode == "tun":
+            import tun_plan
+            try:
+                plan = tun_plan.create_plan()
+            except Exception as e:
+                QMessageBox.critical(self, "TUN Discovery Error", f"Network discovery failed: {e}")
+                return
+
+            has_bind = False
+            for i, arg in enumerate(args_list):
+                if arg in ("-I", "--conn-ip"):
+                    has_bind = True
+                    if i + 1 < len(args_list):
+                        if args_list[i+1] != plan.physical_ip:
+                            QMessageBox.critical(self, "Conflict", "Custom -I/--conn-ip is not supported in TUN mode unless it matches default physical IP.")
+                            return
+                    else:
+                        QMessageBox.critical(self, "Conflict", "Invalid -I argument.")
+                        return
+
+            if not has_bind:
+                args += f" -I {plan.physical_ip}"
 
         if self.pm.start(args):
             self.start_btn.setEnabled(False)
@@ -296,9 +358,9 @@ class MainWindow(QMainWindow):
             self.status_label.setStyleSheet("color: green; font-weight: bold;")
             self.profile_combo.setEnabled(False)
             self.args_input.setEnabled(False)
-            self.proxy_checkbox.setEnabled(False)
+            self.mode_combo.setEnabled(False)
 
-            if self.proxy_checkbox.isChecked() and self.gnome_proxy.is_available():
+            if mode == "gnome":
                 if not self.gnome_proxy.apply_proxy(self._proxy_port()):
                     self.pm.stop()
                     QMessageBox.critical(
@@ -307,16 +369,49 @@ class MainWindow(QMainWindow):
                         "The SOCKS proxy could not be applied safely. "
                         "ByeDPI was stopped.\n\n" + self.gnome_proxy.last_error,
                     )
+                    self.on_process_stopped()
                     return
-
+            elif mode == "tun":
+                try:
+                    self.tun_controller.start(plan)
+                except TunRollbackError as e:
+                    QMessageBox.critical(
+                        self,
+                        "TUN Critical Error",
+                        f"TUN rollback failed. TUN state is corrupted.\n\n{str(e)}"
+                    )
+                    return
+                except Exception as e:
+                    self.tun_controller.stop()
+                    self.pm.stop()
+                    QMessageBox.critical(
+                        self,
+                        "TUN Mode Error",
+                        f"Could not start system-wide TUN VPN mode.\n\n{str(e)}"
+                    )
+                    self.on_process_stopped()
+                    return
         else:
             QMessageBox.warning(self, "Error", "Failed to start process or open port.")
 
     def stop_process(self):
         self.stop_btn.setEnabled(False)
         self.action_stop.setEnabled(False)
+        try:
+            self.tun_controller.stop()
+        except TunRollbackError as e:
+            QMessageBox.critical(
+                self,
+                "TUN Critical Error",
+                f"TUN rollback failed on stop. TUN state is corrupted.\n\n{str(e)}"
+            )
+            self.stop_btn.setEnabled(True)
+            self.action_stop.setEnabled(True)
+            return
+
         self.pm.stop()
         self._restore_proxy_with_warning()
+
 
     def _restore_proxy_with_warning(self) -> bool:
         if not self.gnome_proxy.has_journal():
@@ -334,7 +429,12 @@ class MainWindow(QMainWindow):
 
     def _cleanup_and_stop(self):
         self._restore_proxy_with_warning()
+        try:
+            self.tun_controller.stop()
+        except Exception:
+            pass
         self.pm.stop()
+
 
     def check_proxy(self):
         args = self.args_input.text().strip()
@@ -381,12 +481,20 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Status: Stopped")
         self.status_label.setStyleSheet("color: gray; font-weight: bold;")
         self.profile_combo.setEnabled(True)
-        if self.gnome_proxy.is_available():
-            self.proxy_checkbox.setEnabled(True)
+        self.mode_combo.setEnabled(True)
         if self.profile_combo.currentText() == "Custom":
             self.args_input.setEnabled(True)
         # An unexpected ciadpi exit must not leave the desktop proxy active.
         self._restore_proxy_with_warning()
+        try:
+            self.tun_controller.stop()
+        except TunRollbackError as e:
+            QMessageBox.critical(self, "TUN Critical Error", f"TUN cleanup failed: {e}")
+
+        if getattr(self.tun_controller, "recovery_required", False):
+            self.start_btn.setEnabled(False)
+            self.action_start.setEnabled(False)
+
 
     def closeEvent(self, event):
         self.save_settings()

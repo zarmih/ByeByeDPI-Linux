@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -128,3 +129,21 @@ def test_release_builder_refuses_dirty_tree_without_opt_in(tmp_path):
         marker.unlink(missing_ok=True)
     assert result.returncode == 1
     assert "Working tree is dirty" in result.stderr
+
+def test_release_builder_ignores_untracked_nested_repository(tmp_path):
+    nested = Path("release-builder-nested-repo.tmp")
+    nested.mkdir()
+    try:
+        init = subprocess.run(
+            ["git", "init", "-q", str(nested)],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        assert init.returncode == 0, init.stderr
+        (nested / "untracked.txt").write_text("not part of the release\n", encoding="utf-8")
+
+        result = build_release(tmp_path / "release")
+        assert result.returncode == 0, result.stderr
+    finally:
+        shutil.rmtree(nested, ignore_errors=True)

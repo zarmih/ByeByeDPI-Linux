@@ -173,6 +173,17 @@ class StrategyDetailsDialog(QDialog):
         clipboard.setText("\n".join(texts))
 
 class StrategiesDialog(QDialog):
+    COL_FAV = 0
+    COL_RANK = 1
+    COL_ID = 2
+    COL_NAME = 3
+    COL_PASSED = 4
+    COL_TOTAL = 5
+    COL_PCT = 6
+    COL_AVG = 7
+    COL_MEDIAN = 8
+    COL_ERR = 9
+    COL_STATUS = 10
     strategy_selected = Signal(str)
 
     def __init__(self, parent=None):
@@ -187,14 +198,35 @@ class StrategiesDialog(QDialog):
         self.strategies = []
         self.target_groups = []
         self.targets_dict = {}
-
         self.test_results = {} # strategy_id -> list of target results
         self.is_paused = False
 
         self.load_data()
+        self.favorites = self._load_favorites()
         self.tester_thread = None
         self.init_ui()
         self._restore_dialog_settings()
+
+    def _load_favorites(self) -> list:
+        raw_favorites = self.settings.value("favorites_strategies", [])
+        if raw_favorites is None:
+            candidates = []
+        elif isinstance(raw_favorites, str):
+            candidates = [raw_favorites]
+        elif isinstance(raw_favorites, (list, tuple)):
+            candidates = list(raw_favorites)
+        else:
+            candidates = []
+
+        valid_ids = {s.get("id") for s in self.strategies if s.get("id")}
+        normalized = []
+        for favorite in candidates:
+            if isinstance(favorite, str) and favorite in valid_ids and favorite not in normalized:
+                normalized.append(favorite)
+
+        if candidates != normalized or not isinstance(raw_favorites, list):
+            self.settings.setValue("favorites_strategies", normalized)
+        return normalized
 
     def load_data(self):
         self.strategies = []
@@ -271,8 +303,8 @@ class StrategiesDialog(QDialog):
 
         self.table = QTableWidget(0, 11)
         self.table.setHorizontalHeaderLabels(["★", "Rank", "ID", "Name", "Passed", "Total", "%", "Avg", "Median", "Err", "Status"])
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(self.COL_NAME, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(self.COL_FAV, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setSortingEnabled(True)
@@ -319,6 +351,10 @@ class StrategiesDialog(QDialog):
         self.btn_select_best = QPushButton("Select Best")
         self.btn_select_best.clicked.connect(self.select_best)
         btn_layout.addWidget(self.btn_select_best)
+
+        self.btn_select_best_fav = QPushButton("Select Best Favorite")
+        self.btn_select_best_fav.clicked.connect(self.select_best_favorite)
+        btn_layout.addWidget(self.btn_select_best_fav)
 
         self.btn_export_res = QPushButton("Export Results")
         self.btn_export_res.clicked.connect(self.export_results)
@@ -417,9 +453,8 @@ class StrategiesDialog(QDialog):
     def save_dialog_settings(self):
         favs = []
         for i in range(self.table.rowCount()):
-            item = self.table.item(i, 0)
-            if item and item.checkState() == Qt.Checked:
-                favs.append(self.table.item(i, 2).text())
+            if self.table.item(i, self.COL_FAV).checkState() == Qt.Checked:
+                favs.append(self.table.item(i, self.COL_ID).text())
         self.settings.setValue("favorites_strategies", favs)
 
         selected_ids = [target["target_id"] for target in self.get_selected_targets()]
@@ -453,26 +488,26 @@ class StrategiesDialog(QDialog):
     def populate_table(self):
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(self.strategies))
-        favs = self.settings.value("favorites_strategies", [])
-        if isinstance(favs, str): favs = [favs]
+        favs = self._load_favorites()
+        self.favorites = favs
         for i, s in enumerate(self.strategies):
             sid = s.get("id", "")
 
             fav_item = QTableWidgetItem()
             fav_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
             fav_item.setCheckState(Qt.Checked if sid in favs else Qt.Unchecked)
-            self.table.setItem(i, 0, fav_item)
+            self.table.setItem(i, self.COL_FAV, fav_item)
 
-            self.table.setItem(i, 1, QTableWidgetItem("")) # Rank
-            self.table.setItem(i, 2, QTableWidgetItem(sid))
-            self.table.setItem(i, 3, QTableWidgetItem(s.get("name", "")))
-            self.table.setItem(i, 4, QTableWidgetItem("-")) # Passed
-            self.table.setItem(i, 5, QTableWidgetItem("-")) # Total
-            self.table.setItem(i, 6, QTableWidgetItem("-")) # %
-            self.table.setItem(i, 7, QTableWidgetItem("-")) # Avg
-            self.table.setItem(i, 8, QTableWidgetItem("-")) # Median
-            self.table.setItem(i, 9, QTableWidgetItem("-")) # Errors
-            self.table.setItem(i, 10, QTableWidgetItem("Ready"))
+            self.table.setItem(i, self.COL_RANK, QTableWidgetItem(""))
+            self.table.setItem(i, self.COL_ID, QTableWidgetItem(sid))
+            self.table.setItem(i, self.COL_NAME, QTableWidgetItem(s.get("name", "")))
+            self.table.setItem(i, self.COL_PASSED, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_TOTAL, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_PCT, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_AVG, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_MEDIAN, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_ERR, QTableWidgetItem("-"))
+            self.table.setItem(i, self.COL_STATUS, QTableWidgetItem("Ready"))
         self.table.setSortingEnabled(True)
 
     def filter_table(self, text=None):
@@ -490,7 +525,7 @@ class StrategiesDialog(QDialog):
 
             match_fav = True
             if fav_only:
-                match_fav = self.table.item(i, 0).checkState() == Qt.Checked
+                match_fav = self.table.item(i, self.COL_FAV).checkState() == Qt.Checked
 
             self.table.setRowHidden(i, not (match_search and match_fav))
 
@@ -500,7 +535,7 @@ class StrategiesDialog(QDialog):
             QMessageBox.warning(self, "No selection", "Please select a strategy to test.")
             return
 
-        strategy_id = self.table.item(row, 2).text()
+        strategy_id = self.table.item(row, self.COL_ID).text()
         strategy = next((s for s in self.strategies if s["id"] == strategy_id), None)
         if strategy:
             self.start_tester([strategy])
@@ -539,8 +574,8 @@ class StrategiesDialog(QDialog):
         # Reset states for testing strategies
         for s in strategies_to_test:
             for i in range(self.table.rowCount()):
-                if self.table.item(i, 2).text() == s["id"]:
-                    self.table.setItem(i, 10, QTableWidgetItem("Testing..."))
+                if self.table.item(i, self.COL_ID).text() == s["id"]:
+                    self.table.setItem(i, self.COL_STATUS, QTableWidgetItem("Testing..."))
 
         self.tester_thread = StrategyTesterThread(
             strategies_to_test,
@@ -569,7 +604,6 @@ class StrategiesDialog(QDialog):
 
     def update_progress(self, s_idx, s_total, t_idx, t_total):
         if not self.run_start_time:
-            import time
             self.run_start_time = time.time()
 
         current_global = s_idx * t_total + t_idx
@@ -581,7 +615,6 @@ class StrategiesDialog(QDialog):
         # Calc ETA
         self.completed_runs = current_global
         if self.completed_runs > 5:
-            import time
             elapsed = time.time() - self.run_start_time
             avg_sec = elapsed / self.completed_runs
             remains = self.progress_bar.maximum() - self.completed_runs
@@ -593,8 +626,8 @@ class StrategiesDialog(QDialog):
     def on_strategy_started(self, strategy_id):
         self.test_results[strategy_id] = []
         for i in range(self.table.rowCount()):
-            if self.table.item(i, 2).text() == strategy_id:
-                self.table.setItem(i, 10, QTableWidgetItem("Running..."))
+            if self.table.item(i, self.COL_ID).text() == strategy_id:
+                self.table.setItem(i, self.COL_STATUS, QTableWidgetItem("Running..."))
                 break
 
     def on_target_result(self, strategy_id, target_id, status, duration, http_code, error_msg):
@@ -611,25 +644,25 @@ class StrategiesDialog(QDialog):
         try:
             self.table.setSortingEnabled(False)
             for i in range(self.table.rowCount()):
-                if self.table.item(i, 2).text() == strategy_id:
+                if self.table.item(i, self.COL_ID).text() == strategy_id:
                     pct = (passed / total * 100) if total > 0 else 0
-                    self.table.setItem(i, 4, QTableWidgetItem(str(passed)))
+                    self.table.setItem(i, self.COL_PASSED, QTableWidgetItem(str(passed)))
 
                     item_pct = QTableWidgetItem(f"{pct:.1f}%")
                     item_pct.setData(Qt.UserRole, pct)
-                    self.table.setItem(i, 6, item_pct)
+                    self.table.setItem(i, self.COL_PCT, item_pct)
 
                     item_avg = QTableWidgetItem(f"{avg_time:.2f}")
                     item_avg.setData(Qt.UserRole, avg_time)
-                    self.table.setItem(i, 7, item_avg)
+                    self.table.setItem(i, self.COL_AVG, item_avg)
 
                     item_med = QTableWidgetItem(f"{median_time:.2f}")
                     item_med.setData(Qt.UserRole, median_time)
-                    self.table.setItem(i, 8, item_med)
+                    self.table.setItem(i, self.COL_MEDIAN, item_med)
 
-                    self.table.setItem(i, 5, QTableWidgetItem(str(total)))
-                    self.table.setItem(i, 9, QTableWidgetItem(str(timeout + error)))
-                    self.table.setItem(i, 10, QTableWidgetItem("Done"))
+                    self.table.setItem(i, self.COL_TOTAL, QTableWidgetItem(str(total)))
+                    self.table.setItem(i, self.COL_ERR, QTableWidgetItem(str(timeout + error)))
+                    self.table.setItem(i, self.COL_STATUS, QTableWidgetItem("Done"))
                     break
             self.table.setSortingEnabled(True)
             self.update_ranks()
@@ -719,23 +752,21 @@ class StrategiesDialog(QDialog):
                         QMessageBox.critical(self, "Error", f"Failed to load history: {e}")
 
     def update_ranks(self):
-        # Sort key: passed DESC, success_rate DESC, median successful duration ASC, timeout/error ASC
         rows = []
         for i in range(self.table.rowCount()):
-            passed_str = self.table.item(i, 4).text()
+            passed_str = self.table.item(i, self.COL_PASSED).text()
             passed = int(passed_str) if passed_str.isdigit() else -1
 
-            pct_item = self.table.item(i, 6)
+            pct_item = self.table.item(i, self.COL_PCT)
             pct = pct_item.data(Qt.UserRole) if pct_item and pct_item.data(Qt.UserRole) is not None else -1
 
-            med_item = self.table.item(i, 8)
+            med_item = self.table.item(i, self.COL_MEDIAN)
             med_time = med_item.data(Qt.UserRole) if med_item and med_item.data(Qt.UserRole) is not None else 9999
 
-            err_str = self.table.item(i, 9).text()
+            err_str = self.table.item(i, self.COL_ERR).text()
             errs = int(err_str) if err_str.isdigit() else 9999
 
-            id_val = self.table.item(i, 2).text()
-            # To sort DESC for passed/pct, use negative. For med_time/errs ASC, use positive
+            id_val = self.table.item(i, self.COL_ID).text()
             rows.append((-passed, -pct, med_time, errs, i, id_val))
 
         rows.sort()
@@ -743,18 +774,26 @@ class StrategiesDialog(QDialog):
         self.table.setSortingEnabled(False)
         for rank, (neg_p, neg_pct, med_t, errs, orig_idx, id_val) in enumerate(rows):
             for i in range(self.table.rowCount()):
-                if self.table.item(i, 2).text() == id_val:
-                    if neg_p <= 0: # meaning passed >= 0
-                        self.table.setItem(i, 1, QTableWidgetItem(str(rank + 1)))
+                if self.table.item(i, self.COL_ID).text() == id_val:
+                    if neg_p <= 0:
+                        self.table.setItem(i, self.COL_RANK, QTableWidgetItem(str(rank + 1)))
                     break
         self.table.setSortingEnabled(True)
 
     def select_best(self):
+        self._select_best_by_filter(fav_only=False)
+
+    def select_best_favorite(self):
+        self._select_best_by_filter(fav_only=True)
+
+    def _select_best_by_filter(self, fav_only=False):
         best_row = -1
         best_rank = 9999
         for i in range(self.table.rowCount()):
             if self.table.isRowHidden(i): continue
-            rank_str = self.table.item(i, 1).text()
+            if fav_only and self.table.item(i, self.COL_FAV).checkState() != Qt.Checked: continue
+
+            rank_str = self.table.item(i, self.COL_RANK).text()
             if rank_str.isdigit():
                 if int(rank_str) < best_rank:
                     best_rank = int(rank_str)
@@ -764,11 +803,12 @@ class StrategiesDialog(QDialog):
             self.table.selectRow(best_row)
         else:
             if os.environ.get("QT_QPA_PLATFORM") != "offscreen":
-                QMessageBox.information(self, "No Success", "No tested strategies available.")
+                msg = "No favorite success found." if fav_only else "No successful strategy found."
+                QMessageBox.information(self, "No Results", msg)
 
     def show_details(self, index):
         row = index.row()
-        strategy_id = self.table.item(row, 2).text()
+        strategy_id = self.table.item(row, self.COL_ID).text()
         if strategy_id in self.test_results:
             dlg = StrategyDetailsDialog(strategy_id, self.test_results[strategy_id], self.targets_dict, self)
             dlg.show()
@@ -781,7 +821,7 @@ class StrategiesDialog(QDialog):
                 QMessageBox.warning(self, "No selection", "Please select a strategy to apply.")
             return
 
-        strategy_id = self.table.item(row, 2).text()
+        strategy_id = self.table.item(row, self.COL_ID).text()
         strategy = next((s for s in self.strategies if s["id"] == strategy_id), None)
         if strategy:
             self.strategy_selected.emit(strategy["args"])

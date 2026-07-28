@@ -283,7 +283,10 @@ class MainWindow(QMainWindow):
             return
         self.fav_checkbox.setVisible(True)
         favs = self.settings.value("favorites_strategies", [])
-        if isinstance(favs, str): favs = [favs]
+        if favs is None: favs = []
+        elif isinstance(favs, str): favs = [favs]
+        elif not isinstance(favs, (list, tuple)): favs = []
+        else: favs = list(favs)
 
         # Block signals to avoid toggling trigger
         self.fav_checkbox.blockSignals(True)
@@ -294,7 +297,10 @@ class MainWindow(QMainWindow):
         profile = self.profile_combo.currentText()
         if profile == "Custom": return
         favs = self.settings.value("favorites_strategies", [])
-        if isinstance(favs, str): favs = [favs]
+        if favs is None: favs = []
+        elif isinstance(favs, str): favs = [favs]
+        elif not isinstance(favs, (list, tuple)): favs = []
+        else: favs = list(favs)
 
         if checked and profile not in favs:
             favs.append(profile)

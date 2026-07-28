@@ -110,6 +110,8 @@ def copy_repository(staging_root: Path, *, include_untracked: bool) -> int:
         source = ROOT / relative
         if not source.exists() and not source.is_symlink():
             continue
+        if source.is_dir():
+            continue
         copy_entry(source, staging_root / relative)
         copied += 1
 

@@ -13,6 +13,8 @@ class ProcessManager:
         self.process: Optional[subprocess.Popen] = None
         self._stop_event = threading.Event()
         self._reader_thread: Optional[threading.Thread] = None
+        self._state_lock = threading.RLock()
+        self._stop_notified = False
         self.on_output: Optional[Callable[[str], None]] = None
         self.on_stop: Optional[Callable[[], None]] = None
 
@@ -82,8 +84,9 @@ class ProcessManager:
         self._emit_output(f"Starting process: {' '.join(cmd)}")
 
         self._stop_event.clear()
+        self._stop_notified = False
         try:
-            self.process = subprocess.Popen(
+            proc = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -91,12 +94,16 @@ class ProcessManager:
                 bufsize=1,
                 shell=False
             )
+            with self._state_lock:
+                self.process = proc
         except Exception as e:
             self._emit_output(f"Failed to start process: {e}")
             return False
 
-        self._reader_thread = threading.Thread(target=self._read_output, daemon=True)
-        self._reader_thread.start()
+        reader = threading.Thread(target=self._read_output, args=(proc,), daemon=True)
+        with self._state_lock:
+            self._reader_thread = reader
+        reader.start()
 
         # Check readiness
         if not self._wait_for_port(ip, port, timeout=3.0):
@@ -120,57 +127,95 @@ class ProcessManager:
             time.sleep(0.1)
         return False
 
+    def _notify_stop_once(self):
+        callback = None
+        with self._state_lock:
+            if not self._stop_notified:
+                self._stop_notified = True
+                callback = self.on_stop
+        if callback:
+            callback()
+
     def stop(self, timeout: float = 3.0):
-        if not self.is_running():
+        with self._state_lock:
+            proc = self.process
+            reader = self._reader_thread
+
+        if proc is None and reader is None:
             return
 
         self._emit_output("Stopping process...")
         self._stop_event.set()
-        
-        if self.process:
+
+        if proc is not None:
             try:
-                self.process.terminate()
-                self.process.wait(timeout=timeout)
-            except subprocess.TimeoutExpired:
-                self._emit_output("Process did not stop gracefully, killing it...")
-                self.process.kill()
-                self.process.wait()
+                if proc.poll() is None:
+                    proc.terminate()
+                    try:
+                        proc.wait(timeout=timeout)
+                    except subprocess.TimeoutExpired:
+                        self._emit_output("Process did not stop gracefully, killing it...")
+                        proc.kill()
+                        proc.wait()
             except Exception as e:
                 self._emit_output(f"Error while stopping process: {e}")
+            finally:
+                stdout = proc.stdout
+                if stdout is not None and not stdout.closed:
+                    stdout.close()
 
-        self.process = None
-        if self.on_stop:
-            self.on_stop()
+        current = threading.current_thread()
+        if reader is not None and reader is not current and reader.is_alive():
+            reader.join(timeout=max(timeout, 0.1) + 1.0)
+
+        with self._state_lock:
+            if self.process is proc:
+                self.process = None
+            if self._reader_thread is reader and (reader is None or not reader.is_alive()):
+                self._reader_thread = None
+
+        self._notify_stop_once()
         self._emit_output("Process stopped.")
 
     def is_running(self) -> bool:
-        if self.process is None:
-            return False
-        return self.process.poll() is None
+        with self._state_lock:
+            proc = self.process
+        return proc is not None and proc.poll() is None
 
-    def _read_output(self):
-        if not self.process or not self.process.stdout:
-            return
-            
-        for line in iter(self.process.stdout.readline, ''):
-            if line:
-                self._emit_output(line.rstrip('\n'))
-            if self._stop_event.is_set():
-                break
-                
-        if self.process:
-            self.process.poll()
-            
-        if not self._stop_event.is_set():
-            self._emit_output("Process exited unexpectedly.")
-            if self.on_stop:
-                self.on_stop()
-            self.process = None
+    def _read_output(self, proc: subprocess.Popen):
+        unexpected = False
+        try:
+            stdout = proc.stdout
+            if stdout is None:
+                return
+            for line in iter(stdout.readline, ''):
+                if line:
+                    self._emit_output(line.rstrip('\n'))
+                if self._stop_event.is_set():
+                    break
+            proc.poll()
+            unexpected = not self._stop_event.is_set()
+        finally:
+            stdout = proc.stdout
+            if stdout is not None and not stdout.closed:
+                stdout.close()
+            current = threading.current_thread()
+            with self._state_lock:
+                if self.process is proc:
+                    self.process = None
+                if self._reader_thread is current:
+                    self._reader_thread = None
+            if unexpected:
+                self._emit_output("Process exited unexpectedly.")
+                self._notify_stop_once()
 
     def _emit_output(self, text: str):
         if self.on_output:
             self.on_output(text)
 
     def __del__(self):
-        if self.is_running():
-            self.stop(timeout=1.0)
+        try:
+            if self.process is not None or self._reader_thread is not None:
+                self.stop(timeout=1.0)
+        except Exception:
+            pass

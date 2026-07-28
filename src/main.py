@@ -15,6 +15,9 @@ from process_manager import ProcessManager
 from diagnostics import DiagnosticsDialog
 from version import __version__
 from gnome_proxy import GnomeProxyAdapter
+import settings_schema
+import autostart_manager
+from PySide6.QtWidgets import QFileDialog
 
 PROFILES = {
     "Profile 1 (Default)": "--disorder 1 --auto=torst --tlsrec 1+s",
@@ -66,11 +69,34 @@ class MainWindow(QMainWindow):
 
         top_layout = QHBoxLayout()
 
+        self.fav_checkbox = QCheckBox("★")
+        self.fav_checkbox.setToolTip("Mark strategy as Favorite")
+        self.fav_checkbox.toggled.connect(self.on_fav_toggled)
+        top_layout.addWidget(self.fav_checkbox)
+
         self.profile_combo = QComboBox()
         self.profile_combo.addItems(list(PROFILES.keys()))
         self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
         top_layout.addWidget(QLabel("Profile:"))
         top_layout.addWidget(self.profile_combo)
+
+        menu_bar = self.menuBar()
+        settings_menu = menu_bar.addMenu("Settings")
+
+        self.action_export = QAction("Export Settings...", self)
+        self.action_export.triggered.connect(self.export_settings)
+        settings_menu.addAction(self.action_export)
+
+        self.action_import = QAction("Import Settings...", self)
+        self.action_import.triggered.connect(self.import_settings)
+        settings_menu.addAction(self.action_import)
+
+        settings_menu.addSeparator()
+
+        self.action_autostart = QAction("Start at login", self)
+        self.action_autostart.setCheckable(True)
+        self.action_autostart.toggled.connect(self.toggle_autostart)
+        settings_menu.addAction(self.action_autostart)
 
         self.args_input = QLineEdit()
         self.args_input.setReadOnly(True)
@@ -188,6 +214,9 @@ class MainWindow(QMainWindow):
         if self.gnome_proxy.is_available():
             self.proxy_checkbox.setChecked(proxy_enabled)
 
+        self.action_autostart.setChecked(autostart_manager.is_autostart_enabled())
+        self._update_fav_checkbox()
+
     def save_settings(self):
         self.settings.setValue("geometry", self.saveGeometry())
         self.settings.setValue("profile", self.profile_combo.currentText())
@@ -247,6 +276,100 @@ class MainWindow(QMainWindow):
                 lambda: QMessageBox.critical(self, "Proxy Recovery Failed", message),
             )
 
+    def _update_fav_checkbox(self):
+        profile = self.profile_combo.currentText()
+        if profile == "Custom":
+            self.fav_checkbox.setVisible(False)
+            return
+        self.fav_checkbox.setVisible(True)
+        favs = self.settings.value("favorites_strategies", [])
+        if isinstance(favs, str): favs = [favs]
+
+        # Block signals to avoid toggling trigger
+        self.fav_checkbox.blockSignals(True)
+        self.fav_checkbox.setChecked(profile in favs)
+        self.fav_checkbox.blockSignals(False)
+
+    def on_fav_toggled(self, checked):
+        profile = self.profile_combo.currentText()
+        if profile == "Custom": return
+        favs = self.settings.value("favorites_strategies", [])
+        if isinstance(favs, str): favs = [favs]
+
+        if checked and profile not in favs:
+            favs.append(profile)
+        elif not checked and profile in favs:
+            favs.remove(profile)
+
+        self.settings.setValue("favorites_strategies", favs)
+        self.settings.sync()
+
+    def export_settings(self):
+        # Gather all settings into a dict
+        d = {}
+        for k in self.settings.allKeys():
+            d[k] = self.settings.value(k)
+        d["autostart"] = autostart_manager.is_autostart_enabled()
+
+        json_str = settings_schema.export_settings(d)
+        path, _ = QFileDialog.getSaveFileName(self, "Export Settings", "byebyedpi-settings.json", "JSON Files (*.json)")
+        if path:
+            try:
+                with open(path, 'w', encoding='utf-8') as f:
+                    f.write(json_str)
+                QMessageBox.information(self, "Success", "Settings exported successfully.")
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to export settings: {e}")
+
+    def import_settings(self):
+        path, _ = QFileDialog.getOpenFileName(self, "Import Settings", "", "JSON Files (*.json)")
+        if not path:
+            return
+
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                json_str = f.read()
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Failed to read file: {e}")
+            return
+
+        try:
+            updates = settings_schema.import_settings(json_str)
+        except Exception as e:
+            QMessageBox.critical(self, "Error", f"Invalid settings file: {e}")
+            return
+
+        # Preview dialog
+        added_changed = []
+        for k, v in updates.items():
+            added_changed.append(f"{k}: {v}")
+
+        preview = "The following settings will be applied:\n" + "\n".join(added_changed)
+        reply = QMessageBox.question(self, "Import Settings Preview", preview + "\n\nProceed?", QMessageBox.Yes | QMessageBox.No)
+        if reply == QMessageBox.No:
+            return
+
+        # Apply updates
+        for k, v in updates.items():
+            if k == "autostart":
+                autostart_manager.set_autostart(v)
+            else:
+                self.settings.setValue(k, v)
+        self.settings.sync()
+        self.load_settings()
+        QMessageBox.information(self, "Success", "Settings imported successfully.")
+
+    def toggle_autostart(self, checked):
+        if self._is_test_environment():
+            QMessageBox.warning(self, "Test Environment", "Autostart changes are disabled in tests.")
+            self.action_autostart.setChecked(not checked)
+            return
+
+        success, msg = autostart_manager.set_autostart(checked)
+        if not success:
+            QMessageBox.warning(self, "Autostart Error", msg)
+            self.action_autostart.setChecked(not checked)
+
     def _proxy_port(self) -> int:
         try:
             args_list = shlex.split(self.args_input.text().strip())
@@ -269,6 +392,7 @@ class MainWindow(QMainWindow):
         else:
             self.args_input.setReadOnly(True)
             self.args_input.setText(args)
+        self._update_fav_checkbox()
 
     def open_library(self):
         from strategies_dialog import StrategiesDialog

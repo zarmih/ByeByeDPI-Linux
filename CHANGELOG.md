@@ -2,6 +2,13 @@
 
 All notable user-facing changes are documented here.
 
+## [Unreleased]
+
+### Added
+- Favorites toggle in Strategy Library and main window for quick access to best strategies.
+- Settings Schema v1: full safe export and import of user settings with validation, preview, and rollback.
+- Rootless XDG autostart management (Start at login) via the settings menu.
+
 ## 0.2.0 — 2026-07-26
 
 ### Added

@@ -56,11 +56,19 @@ class MainWindow(QMainWindow):
         self.load_settings()
         self._recover_pending_proxy()
 
-        if (
-            not self.settings.value("first_run_done", False, type=bool)
-            and not self._is_test_environment()
-        ):
+        first_run_report = self.settings.value("first_run_report", None)
+        show_diag = False
+        if not self._is_test_environment():
+            if not first_run_report:
+                show_diag = True
+            elif isinstance(first_run_report, dict) and first_run_report.get("status") == "FAIL":
+                show_diag = True
+
+        if show_diag:
             QTimer.singleShot(0, self._show_first_run_diagnostics)
+        elif not os.path.exists(self.binary_path):
+            self.start_btn.setEnabled(False)
+            self.start_btn.setToolTip("ciadpi is missing. Check diagnostics.")
 
     def init_ui(self):
         central_widget = QWidget()
@@ -258,9 +266,24 @@ class MainWindow(QMainWindow):
         )
 
     def _show_first_run_diagnostics(self):
-        self.run_diagnostics()
-        self.settings.setValue("first_run_done", True)
-        self.settings.sync()
+        diag = DiagnosticsDialog(self.binary_path, self)
+        diag.run_diagnostics()
+        diag.exec()
+        if diag.last_report:
+            report_summary = {
+                "schema_version": diag.last_report.get("schema_version", 1),
+                "timestamp": diag.last_report.get("timestamp", 0),
+                "status": diag.last_report.get("status", "FAIL")
+            }
+            self.settings.setValue("first_run_report", report_summary)
+            self.settings.sync()
+
+            if not os.path.exists(self.binary_path):
+                self.start_btn.setEnabled(False)
+                self.start_btn.setToolTip("ciadpi is missing. Check diagnostics.")
+            else:
+                self.start_btn.setEnabled(True)
+                self.start_btn.setToolTip("")
 
     def _recover_pending_proxy(self):
         if not self.gnome_proxy.has_journal():
@@ -488,8 +511,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Proxy Check", f"Proxy is NOT reachable at 127.0.0.1:{port}")
 
     def run_diagnostics(self):
-        diag = DiagnosticsDialog(self)
-        diag.run_diagnostics(self.binary_path)
+        diag = DiagnosticsDialog(self.binary_path, self)
+        diag.run_diagnostics()
         diag.exec()
 
     def _on_process_output(self, text: str):

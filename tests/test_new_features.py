@@ -207,9 +207,17 @@ def test_diagnostics_report_is_copyable_and_redacts_home(qapp, monkeypatch, tmp_
         "make": "/usr/bin/make",
         "cc": "/usr/bin/cc",
     }
-    monkeypatch.setattr("diagnostics.shutil.which", lambda name: tools.get(name))
-    dialog = DiagnosticsDialog()
-    assert dialog.run_diagnostics(str(binary))
+    monkeypatch.setattr("diagnostics_core.shutil.which", lambda name: tools.get(name))
+    dialog = DiagnosticsDialog(str(binary))
+    dialog.run_diagnostics()
+
+    import time
+    for _ in range(50):
+        if dialog.last_report is not None:
+            break
+        qapp.processEvents()
+        time.sleep(0.01)
+
     report = dialog.report_area.toPlainText()
     assert "PySide6" in report
     assert str(Path.home()) not in report

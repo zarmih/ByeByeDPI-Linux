@@ -28,6 +28,8 @@ EXCLUDED_PREFIXES = (
     ".pytest_cache/",
     ".mypy_cache/",
     ".ruff_cache/",
+    "uv.lock",
+    "vendor/hev-socks5-tunnel/",
 )
 REQUIRED_RELEASE_FILES = (
     "LICENSE",

@@ -4,10 +4,19 @@ All notable user-facing changes are documented here.
 
 ## [Unreleased]
 
+## 0.3.0 — 2026-07-29
+
 ### Added
 - Favorites toggle in Strategy Library and main window for quick access to best strategies.
+- "Select Best Favorite" button to pick the top-performing favorite strategy.
 - Settings Schema v1: full safe export and import of user settings with validation, preview, and rollback.
 - Rootless XDG autostart management (Start at login) via the settings menu.
+
+### Fixed
+- ProcessManager lifecycle: proper thread join, stdout pipe closure and idempotent stop preventing ResourceWarning and zombie file descriptors.
+- Favorites loading from QSettings now handles None, bare strings, non-list types and stale strategy IDs without crashing.
+- Release builder correctly ignores nested untracked directories (e.g. vendor submodules not on the current branch).
+- Trailing whitespace cleanup across all modified source files.
 
 ## 0.2.0 — 2026-07-26
 

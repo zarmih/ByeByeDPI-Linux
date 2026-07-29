@@ -1,6 +1,6 @@
 [project]
 name = "byebyedpi-linux"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Linux GUI for ByeDPI (ciadpi)"
 readme = "README.md"
 license = "GPL-3.0-only"

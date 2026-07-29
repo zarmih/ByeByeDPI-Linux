@@ -1,6 +1,6 @@
 # ROADMAP
 
-## Current Milestone (Desktop Usability)
+## Completed — v0.3.0 (Desktop Usability)
 - [x] Settings Schema v1 (safe export/import).
 - [x] Rootless XDG autostart.
 - [x] Favorites management and filtering.

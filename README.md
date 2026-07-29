@@ -54,13 +54,13 @@ make -C vendor/byedpi
 
 ## Релизы, CI и лицензия
 
-Текущая версия приложения: **0.2.0**. GitHub Actions собирает `ciadpi`, запускает полный pytest и Qt-smoke на Python 3.10/3.12, затем создаёт воспроизводимый source-архив как workflow artifact.
+Текущая версия приложения: **0.3.0**. GitHub Actions собирает `ciadpi`, запускает полный pytest и Qt-smoke на Python 3.10/3.12, затем создаёт воспроизводимый source-архив как workflow artifact.
 
 Локальная сборка такого же архива:
 
 ```bash
 scripts/build-release.sh --output-dir dist
-sha256sum -c dist/ByeByeDPI-Linux-0.2.0.tar.gz.sha256
+sha256sum -c dist/ByeByeDPI-Linux-0.3.0.tar.gz.sha256
 ```
 
 Архив включает исходники закреплённого submodule ByeDPI, внутренний `SHA256SUMS`, metadata и лицензии, но не включает локально собранный бинарник `ciadpi`. Подробности: [`docs/RELEASING.md`](docs/RELEASING.md) и [`CHANGELOG.md`](CHANGELOG.md).

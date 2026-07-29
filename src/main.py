@@ -106,6 +106,11 @@ class MainWindow(QMainWindow):
         self.action_autostart.toggled.connect(self.toggle_autostart)
         settings_menu.addAction(self.action_autostart)
 
+        help_menu = menu_bar.addMenu("Help")
+        self.action_update = QAction("Check for App Updates...", self)
+        self.action_update.triggered.connect(self.check_app_updates)
+        help_menu.addAction(self.action_update)
+
         self.args_input = QLineEdit()
         self.args_input.setReadOnly(True)
         top_layout.addWidget(QLabel("Args:"))
@@ -427,6 +432,11 @@ class MainWindow(QMainWindow):
         from strategies_dialog import StrategiesDialog
         dialog = StrategiesDialog(self)
         dialog.strategy_selected.connect(self.on_strategy_selected)
+        dialog.exec()
+
+    def check_app_updates(self):
+        from app_update_dialog import AppUpdateDialog
+        dialog = AppUpdateDialog(self)
         dialog.exec()
 
     def on_strategy_selected(self, args):

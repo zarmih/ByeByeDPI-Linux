@@ -46,6 +46,7 @@ make -C vendor/byedpi
   - Minimize to system tray when a tray service is available; otherwise window close performs full cleanup.
   - Automatically manages the `ciadpi` process and restores a pending GNOME proxy journal on startup/Stop/Quit.
   - *Optional* user-level GNOME SOCKS proxy configuration via `gsettings`. It is not VPN/TUN and may be ignored by some applications.
+- **App Updater**: Built-in dialog to manually check for releases on GitHub, verify checksums, and safely download updates to a temporary directory without auto-installing.
 - **Diagnostics**: Built-in first-run readiness and diagnostics tool. It safely checks the presence of `ciadpi` binary, PySide6 version, `curl`, writable directories, and local port availability. The diagnostics module operates strictly read-only and offline: it does NOT modify system settings, does NOT send any network requests, and redacts personal paths from the exported reports (JSON/TXT).
 - **Result History & Comparison**: Save test results, export to CSV, and visually compare performance and capabilities between different DPI bypass strategies.
 - **User Installation**: Easy `install-user.sh` for non-root installation to `~/.local`.

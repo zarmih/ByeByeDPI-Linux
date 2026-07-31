@@ -78,15 +78,16 @@ def validate_version(value: str) -> str:
     return value
 
 
-def git_paths(cwd: Path, *, include_untracked: bool) -> list[str]:
-    tracked = run_git(["ls-files", "-z"], cwd=cwd).split("\0")
-    paths = [path for path in tracked if path]
+def git_paths(cwd: Path, *, include_untracked: bool) -> tuple[set[str], set[str]]:
+    tracked = set(path for path in run_git(["ls-files", "-z"], cwd=cwd).split("\0") if path)
+    untracked = set()
     if include_untracked:
-        extra = run_git(
-            ["ls-files", "--others", "--exclude-standard", "-z"], cwd=cwd
-        ).split("\0")
-        paths.extend(path for path in extra if path)
-    return sorted(set(paths))
+        untracked = set(
+            path for path in run_git(
+                ["ls-files", "--others", "--exclude-standard", "-z"], cwd=cwd
+            ).split("\0") if path
+        )
+    return tracked, untracked
 
 
 def excluded(relative: str) -> bool:
@@ -106,8 +107,11 @@ def copy_entry(source: Path, destination: Path) -> None:
 
 def copy_repository(staging_root: Path, *, include_untracked: bool) -> int:
     copied = 0
-    for relative in git_paths(ROOT, include_untracked=include_untracked):
-        if relative == "vendor/byedpi" or excluded(relative):
+    tracked, untracked = git_paths(ROOT, include_untracked=include_untracked)
+    for relative in sorted(tracked | untracked):
+        if relative == "vendor/byedpi":
+            continue
+        if relative in untracked and excluded(relative):
             continue
         source = ROOT / relative
         if not source.exists() and not source.is_symlink():
@@ -119,7 +123,8 @@ def copy_repository(staging_root: Path, *, include_untracked: bool) -> int:
 
     if not (SUBMODULE / ".git").exists() and not (SUBMODULE / "Makefile").is_file():
         raise ReleaseError("vendor/byedpi submodule is missing; clone with --recurse-submodules")
-    for relative in git_paths(SUBMODULE, include_untracked=False):
+    sub_tracked, _ = git_paths(SUBMODULE, include_untracked=False)
+    for relative in sorted(sub_tracked):
         source = SUBMODULE / relative
         if not source.exists() and not source.is_symlink():
             continue

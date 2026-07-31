@@ -16,6 +16,7 @@ All notable user-facing changes are documented here.
 - ProcessManager lifecycle: proper thread join, stdout pipe closure and idempotent stop preventing ResourceWarning and zombie file descriptors.
 - Favorites loading from QSettings now handles None, bare strings, non-list types and stale strategy IDs without crashing.
 - Release builder correctly ignores nested untracked directories (e.g. vendor submodules not on the current branch).
+- App Updater rewritten for strict SemVer parsing, secure downloads, explicit confirmations, and strict GitHub API validation.
 - Trailing whitespace cleanup across all modified source files.
 
 ## 0.2.0 — 2026-07-26

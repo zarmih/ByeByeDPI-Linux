@@ -147,3 +147,50 @@ def test_release_builder_ignores_untracked_nested_repository(tmp_path):
         assert result.returncode == 0, result.stderr
     finally:
         shutil.rmtree(nested, ignore_errors=True)
+
+def test_release_builder_excludes_untracked_uv_lock(tmp_path):
+    uv_lock = Path("uv.lock")
+    assert not uv_lock.exists()
+    uv_lock.write_text("untracked lock\n", encoding="utf-8")
+    try:
+        result = build_release(tmp_path / "release")
+        assert result.returncode == 0, result.stderr
+
+        archive = tmp_path / "release" / "ByeByeDPI-Linux-0.2.0-test.tar.gz"
+        with tarfile.open(archive, "r:gz") as tar:
+            names = tar.getnames()
+            assert not any(name.endswith("/uv.lock") for name in names)
+    finally:
+        uv_lock.unlink(missing_ok=True)
+
+
+def test_release_builder_includes_tracked_uv_lock(tmp_path):
+    uv_lock = Path("uv.lock")
+    assert not uv_lock.exists()
+    uv_lock.write_text("tracked lock\n", encoding="utf-8")
+    try:
+        subprocess.run(["git", "add", "-f", "uv.lock"], check=True)
+        result = build_release(tmp_path / "release")
+        assert result.returncode == 0, result.stderr
+
+        archive = tmp_path / "release" / "ByeByeDPI-Linux-0.2.0-test.tar.gz"
+        with tarfile.open(archive, "r:gz") as tar:
+            names = tar.getnames()
+            assert any(name.endswith("/uv.lock") for name in names)
+    finally:
+        subprocess.run(["git", "rm", "--cached", "--ignore-unmatch", "uv.lock"], check=False)
+        uv_lock.unlink(missing_ok=True)
+
+
+def test_release_builder_includes_safe_untracked_file(tmp_path):
+    marker = Path("release-builder-safe-untracked.tmp")
+    marker.write_text("safe untracked content\n", encoding="utf-8")
+    try:
+        result = build_release(tmp_path / "release")
+        assert result.returncode == 0, result.stderr
+        archive = tmp_path / "release" / "ByeByeDPI-Linux-0.2.0-test.tar.gz"
+        with tarfile.open(archive, "r:gz") as tar:
+            names = tar.getnames()
+            assert any(name.endswith("/release-builder-safe-untracked.tmp") for name in names)
+    finally:
+        marker.unlink(missing_ok=True)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import inspect
 import json
 import shutil
@@ -148,39 +149,44 @@ def test_release_builder_ignores_untracked_nested_repository(tmp_path):
     finally:
         shutil.rmtree(nested, ignore_errors=True)
 
-def test_release_builder_excludes_untracked_uv_lock(tmp_path):
-    uv_lock = Path("uv.lock")
-    assert not uv_lock.exists()
-    uv_lock.write_text("untracked lock\n", encoding="utf-8")
-    try:
-        result = build_release(tmp_path / "release")
-        assert result.returncode == 0, result.stderr
+def _copy_repository_with_uv_lock(tmp_path: Path, *, tracked: bool) -> Path:
+    script = Path("scripts/build-release.py").resolve()
+    spec = importlib.util.spec_from_file_location("release_builder_under_test", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
 
-        archive = tmp_path / "release" / "ByeByeDPI-Linux-0.2.0-test.tar.gz"
-        with tarfile.open(archive, "r:gz") as tar:
-            names = tar.getnames()
-            assert not any(name.endswith("/uv.lock") for name in names)
-    finally:
-        uv_lock.unlink(missing_ok=True)
+    root = tmp_path / "repo"
+    submodule = root / "vendor" / "byedpi"
+    submodule.mkdir(parents=True)
+    (root / "uv.lock").write_text("test lock\n", encoding="utf-8")
+    (submodule / "Makefile").write_text("all:\n\t@true\n", encoding="utf-8")
+
+    module.ROOT = root
+    module.SUBMODULE = submodule
+
+    def fake_git_paths(cwd: Path, *, include_untracked: bool):
+        if cwd == root:
+            if tracked:
+                return {"uv.lock"}, set()
+            return set(), {"uv.lock"} if include_untracked else set()
+        if cwd == submodule:
+            return {"Makefile"}, set()
+        raise AssertionError(f"unexpected repository path: {cwd}")
+
+    module.git_paths = fake_git_paths
+    staging = tmp_path / "staging"
+    module.copy_repository(staging, include_untracked=True)
+    return staging / "uv.lock"
+
+
+def test_release_builder_excludes_untracked_uv_lock(tmp_path):
+    assert not _copy_repository_with_uv_lock(tmp_path, tracked=False).exists()
 
 
 def test_release_builder_includes_tracked_uv_lock(tmp_path):
-    uv_lock = Path("uv.lock")
-    assert not uv_lock.exists()
-    uv_lock.write_text("tracked lock\n", encoding="utf-8")
-    try:
-        subprocess.run(["git", "add", "-f", "uv.lock"], check=True)
-        result = build_release(tmp_path / "release")
-        assert result.returncode == 0, result.stderr
-
-        archive = tmp_path / "release" / "ByeByeDPI-Linux-0.2.0-test.tar.gz"
-        with tarfile.open(archive, "r:gz") as tar:
-            names = tar.getnames()
-            assert any(name.endswith("/uv.lock") for name in names)
-    finally:
-        subprocess.run(["git", "rm", "--cached", "--ignore-unmatch", "uv.lock"], check=False)
-        uv_lock.unlink(missing_ok=True)
-
+    copied = _copy_repository_with_uv_lock(tmp_path, tracked=True)
+    assert copied.read_text(encoding="utf-8") == "test lock\n"
 
 def test_release_builder_includes_safe_untracked_file(tmp_path):
     marker = Path("release-builder-safe-untracked.tmp")

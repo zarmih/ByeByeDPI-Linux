@@ -73,10 +73,34 @@ class AppUpdateDialog(QDialog):
         self.dest_dir = None
         self.downloader = None
 
+        self.close_btn.setEnabled(False)
         self.checker = CheckUpdateThread()
         self.checker.result.connect(self.on_check_result)
         self.checker.error.connect(self.on_check_error)
+        self.checker.finished.connect(self.on_checker_finished)
         self.checker.start()
+
+    def update_controls_state(self):
+        is_running = False
+        if self.checker and self.checker.isRunning():
+            is_running = True
+        if self.downloader and self.downloader.isRunning():
+            is_running = True
+        self.close_btn.setEnabled(not is_running)
+        if self.release_info is not None:
+            self.download_btn.setEnabled(not is_running)
+
+    def on_checker_finished(self):
+        if self.checker is not None:
+            self.checker.deleteLater()
+            self.checker = None
+        self.update_controls_state()
+
+    def on_downloader_finished(self):
+        if self.downloader is not None:
+            self.downloader.deleteLater()
+            self.downloader = None
+        self.update_controls_state()
 
     def on_check_result(self, info: ReleaseInfo | None):
         if info:
@@ -109,13 +133,14 @@ class AppUpdateDialog(QDialog):
         if reply != QMessageBox.Yes:
             return
 
-        self.download_btn.setEnabled(False)
         self.dest_dir = tempfile.mkdtemp(prefix="byebyedpi-update-")
         self.status_label.setText(f"Downloading to {self.dest_dir} ...")
 
         self.downloader = DownloadUpdateThread(self.release_info, self.dest_dir)
         self.downloader.success.connect(self.on_download_success)
         self.downloader.error.connect(self.on_download_error)
+        self.downloader.finished.connect(self.on_downloader_finished)
+        self.update_controls_state()
         self.downloader.start()
 
     def on_download_success(self, path: str):
@@ -126,15 +151,20 @@ class AppUpdateDialog(QDialog):
 
     def on_download_error(self, err: str):
         self.status_label.setText(self.status_label.text() + f"\nDownload failed: {err}")
-        self.download_btn.setEnabled(True)
+        if self.dest_dir:
+            try:
+                os.rmdir(self.dest_dir)
+            except OSError:
+                pass
+            self.dest_dir = None
 
     def closeEvent(self, event):
+        is_running = False
+        if self.checker and self.checker.isRunning():
+            is_running = True
         if self.downloader and self.downloader.isRunning():
-            QMessageBox.warning(self, "Warning", "Download in progress. Please wait until it completes.")
+            is_running = True
+        if is_running:
             event.ignore()
             return
-        if self.checker and self.checker.isRunning():
-            self.checker.result.disconnect()
-            self.checker.error.disconnect()
-            self.checker.wait(500)
         event.accept()

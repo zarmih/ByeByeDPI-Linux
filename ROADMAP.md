@@ -16,7 +16,10 @@ This file is the short project-level roadmap. `docs/ROADMAP.md` is the detailed 
   - [x] Deterministic source archive + external SHA-256 checksum uploaded as the release candidate.
   - [ ] Cryptographically signed maintainer tags (no signing key is configured on this workstation yet).
   - [x] Packaged Linux x86_64 runtime artifact with prebuilt `ciadpi`, metadata, and verified internal/external SHA-256 checksums.
-- [ ] KDE proxy adapter with the same journal/rollback guarantees as the GNOME adapter.
+- [x] KDE proxy adapter with the same journal/rollback guarantees as the GNOME adapter.
+  - Uses KDE/KIO `kioslaverc` `[Proxy Settings]` through KDE KConfig tools.
+  - Restores each managed key exactly, deleting keys that were absent before.
+  - Desktop-aware GNOME/KDE selection preserves pending recovery journals across session changes.
 - [x] Per-application setup guides and browser launch helpers.
   - Firefox manual SOCKS5 + proxy DNS guide.
   - Chromium-family isolated-profile launcher with local-port preflight.

@@ -19,6 +19,10 @@ The goal is functional Linux equivalence for the useful desktop workflow, not a 
 - [x] GUI update center with preview, pinned source SHA, content diff, backup and rollback.
 - [x] Reproducible source-release artifacts, checksums and CI builds.
 - [ ] Signed release tags and packaged binary artifacts.
+  - [x] Existing annotated version-tag validation and tag-triggered GitHub Release automation.
+  - [x] Deterministic source archive + external SHA-256 checksum uploaded as the release candidate.
+  - [ ] Cryptographically signed maintainer tags (no signing key is configured on this workstation yet).
+  - [ ] Packaged Linux runtime/binary artifact.
 - [ ] KDE proxy adapter with the same journal/rollback guarantees.
 - [x] Per-application setup guides and browser launch helpers.
   - Firefox manual SOCKS5 + proxy DNS guide.

@@ -46,4 +46,19 @@ sha256sum -c SHA256SUMS
 
 ## CI
 
-`.github/workflows/ci.yml` builds `ciadpi`, runs tests and Qt offscreen smoke checks on Python 3.10 and 3.12, then creates the deterministic source archive and uploads it as a workflow artifact. A maintainer should publish a GitHub release only after that workflow succeeds and the checksum is independently verified.
+`.github/workflows/ci.yml` builds `ciadpi`, runs the test suite on Ubuntu 22.04 and 24.04 with Python 3.10 and 3.12, runs Qt offscreen smoke checks, and performs a real Qt display smoke under a Weston headless Wayland compositor. It then creates the deterministic source archive and uploads it as a workflow artifact.
+
+## Automated tag release workflow
+
+`.github/workflows/release.yml` validates an existing annotated `vX.Y.Z` tag, checks that the tag matches both `pyproject.toml` and `src/version.py`, builds the deterministic source archive, verifies its external SHA-256 file and uploads the result as a release candidate.
+
+A push of a future version tag publishes the validated assets with GitHub CLI using `--verify-tag`; the workflow refuses to overwrite an existing release. The workflow can also be run manually with `publish=false` to perform a safe release-candidate dry run without creating or modifying a GitHub Release.
+
+The release workflow only detects whether an annotated tag contains a PGP/SSH signature block; it does **not** claim cryptographic trust by itself. Maintainer tag signing remains a separate prerequisite until a real signing key and trust policy are configured.
+
+Recommended future tag flow after signing is configured:
+
+```bash
+git tag -s vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+```

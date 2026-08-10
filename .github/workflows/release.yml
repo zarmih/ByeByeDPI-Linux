@@ -117,6 +117,89 @@ jobs:
           cd dist
           sha256sum -c "ByeByeDPI-Linux-${{ steps.meta.outputs.version }}.tar.gz.sha256"
 
+      - name: Build Linux x86_64 runtime bundle with prebuilt ciadpi
+        shell: bash
+        env:
+          VERSION: ${{ steps.meta.outputs.version }}
+          EPOCH: ${{ steps.meta.outputs.epoch }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          TAG_COMMIT: ${{ steps.meta.outputs.commit }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "x86_64" || {
+            echo "This release job currently builds the x86_64 runtime bundle only." >&2
+            exit 1
+          }
+
+          make -C vendor/byedpi
+          test -x vendor/byedpi/ciadpi
+          file vendor/byedpi/ciadpi | grep -q 'ELF 64-bit'
+
+          SOURCE_ARCHIVE="dist/ByeByeDPI-Linux-${VERSION}.tar.gz"
+          TOP="ByeByeDPI-Linux-${VERSION}"
+          RUNTIME_ARCHIVE="dist/ByeByeDPI-Linux-${VERSION}-linux-x86_64.tar.gz"
+          STAGE="$(mktemp -d)"
+          trap 'rm -rf "$STAGE"' EXIT
+
+          tar -xzf "$SOURCE_ARCHIVE" -C "$STAGE"
+          test -d "$STAGE/$TOP"
+          install -m 0755 vendor/byedpi/ciadpi "$STAGE/$TOP/vendor/byedpi/ciadpi"
+
+          STAGE_ROOT="$STAGE/$TOP" python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["STAGE_ROOT"])
+          binary = root / "vendor/byedpi/ciadpi"
+          binary_sha = hashlib.sha256(binary.read_bytes()).hexdigest()
+          metadata = {
+              "artifact_type": "linux-runtime-bundle",
+              "architecture": "x86_64",
+              "ciadpi_sha256": binary_sha,
+              "project_version": os.environ["VERSION"],
+              "source_tag": os.environ["TAG"],
+              "source_commit": os.environ["TAG_COMMIT"],
+          }
+          (root / "RUNTIME-BUNDLE-METADATA.json").write_text(
+              json.dumps(metadata, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          checksum_lines = []
+          for path in sorted(root.rglob("*")):
+              if not path.is_file():
+                  continue
+              relative = path.relative_to(root).as_posix()
+              if relative == "SHA256SUMS":
+                  continue
+              digest = hashlib.sha256(path.read_bytes()).hexdigest()
+              checksum_lines.append(f"{digest}  {relative}")
+          (root / "SHA256SUMS").write_text(
+              "\n".join(checksum_lines) + "\n", encoding="utf-8"
+          )
+          PY
+
+          tar \
+            --sort=name \
+            --mtime="@${EPOCH}" \
+            --owner=0 \
+            --group=0 \
+            --numeric-owner \
+            --format=gnu \
+            -C "$STAGE" \
+            -cf - "$TOP" | gzip -n -9 > "$RUNTIME_ARCHIVE"
+
+          sha256sum "$RUNTIME_ARCHIVE" > "$RUNTIME_ARCHIVE.sha256"
+
+          VERIFY="$(mktemp -d)"
+          trap 'rm -rf "$STAGE" "$VERIFY"' EXIT
+          tar -xzf "$RUNTIME_ARCHIVE" -C "$VERIFY"
+          test -x "$VERIFY/$TOP/vendor/byedpi/ciadpi"
+          test -f "$VERIFY/$TOP/RUNTIME-BUNDLE-METADATA.json"
+          (cd "$VERIFY/$TOP" && sha256sum -c SHA256SUMS)
+
       - name: Show release candidate metadata
         shell: bash
         run: |

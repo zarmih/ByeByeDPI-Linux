@@ -62,3 +62,9 @@ Recommended future tag flow after signing is configured:
 git tag -s vX.Y.Z -m "Release vX.Y.Z"
 git push origin vX.Y.Z
 ```
+
+### Linux runtime bundle
+
+The release workflow also builds `ByeByeDPI-Linux-X.Y.Z-linux-x86_64.tar.gz`. It starts from the deterministic source archive, injects the `ciadpi` ELF binary built on the Ubuntu release runner, writes `RUNTIME-BUNDLE-METADATA.json`, regenerates the archive's internal `SHA256SUMS`, and emits an external `.sha256` file.
+
+This runtime bundle is **not** a fully self-contained AppImage: the application still requires Python 3.10+ and the installer creates a user virtual environment for PySide6. Its benefit is that the target machine no longer needs a C compiler/`make` just to build `ciadpi`.

@@ -23,7 +23,10 @@ The goal is functional Linux equivalence for the useful desktop workflow, not a 
   - [x] Deterministic source archive + external SHA-256 checksum uploaded as the release candidate.
   - [ ] Cryptographically signed maintainer tags (no signing key is configured on this workstation yet).
   - [x] Packaged Linux x86_64 runtime artifact with prebuilt `ciadpi`, metadata, and verified internal/external SHA-256 checksums.
-- [ ] KDE proxy adapter with the same journal/rollback guarantees.
+- [x] KDE proxy adapter with the same journal/rollback guarantees.
+  - Uses KDE/KIO `kioslaverc` `[Proxy Settings]` through KDE KConfig tools.
+  - Restores each managed key exactly, deleting keys that were absent before.
+  - Desktop-aware GNOME/KDE selection preserves pending recovery journals across session changes.
 - [x] Per-application setup guides and browser launch helpers.
   - Firefox manual SOCKS5 + proxy DNS guide.
   - Chromium-family isolated-profile launcher with local-port preflight.

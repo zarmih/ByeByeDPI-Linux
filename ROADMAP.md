@@ -15,7 +15,7 @@ This file is the short project-level roadmap. `docs/ROADMAP.md` is the detailed 
   - [x] Existing annotated version-tag validation and tag-triggered GitHub Release automation.
   - [x] Deterministic source archive + external SHA-256 checksum uploaded as the release candidate.
   - [ ] Cryptographically signed maintainer tags (no signing key is configured on this workstation yet).
-  - [ ] Packaged Linux runtime/binary artifact.
+  - [x] Packaged Linux x86_64 runtime artifact with prebuilt `ciadpi`, metadata, and verified internal/external SHA-256 checksums.
 - [ ] KDE proxy adapter with the same journal/rollback guarantees as the GNOME adapter.
 - [x] Per-application setup guides and browser launch helpers.
   - Firefox manual SOCKS5 + proxy DNS guide.

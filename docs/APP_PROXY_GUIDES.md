@@ -16,6 +16,8 @@ The KDE adapter snapshots only the keys it changes (`httpProxy`, `httpsProxy`, `
 
 If a recovery journal exists from the previous desktop adapter, recovery takes priority over the current desktop-session hint so a GNOME↔KDE session switch does not silently strand proxy settings.
 
+CI also runs the KDE adapter against the real `kreadconfig5`/`kwriteconfig5` binaries on Ubuntu 22.04 and 24.04 with an isolated temporary `XDG_CONFIG_HOME`. That integration test verifies real `kioslaverc` apply/restore semantics without touching the runner account's normal KDE configuration.
+
 ## Firefox
 
 Firefox has its own proxy UI, so no launcher helper is required:

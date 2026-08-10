@@ -77,6 +77,35 @@ jobs:
             exit 1
           fi
 
+  kde-kconfig-smoke:
+    name: KDE KConfig / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install KDE KConfig CLI tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libkf5config-bin
+          command -v kreadconfig5
+          command -v kwriteconfig5
+
+      - name: Exercise real isolated kioslaverc apply and rollback
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+        run: python tests/smoke_test_kde_proxy_real.py
+
   wayland-smoke:
     name: Wayland / Ubuntu 24.04 / Python 3.12
     runs-on: ubuntu-24.04

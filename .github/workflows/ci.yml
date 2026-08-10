@@ -51,6 +51,7 @@ jobs:
         run: |
           bash -n bootstrap dev-run scripts/*.sh
           python -m compileall -q src tests scripts
+          python tests/smoke_test_browser_proxy_helper.py
 
       - name: Run test suite
         env:

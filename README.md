@@ -115,6 +115,16 @@ Backup хранится вне репозитория в пользовател�
 7. Нажмите ОК.
 
 *Чтобы вернуть настройки обратно, выберите "Без прокси" (No proxy).*
+
+### Chromium / Chrome / Brave и другие приложения
+
+Для Chromium-family добавлен безопасный launcher, который не меняет системный proxy и использует отдельный профиль:
+
+```bash
+python3 scripts/launch_browser_proxy.py --port 1080 --url https://example.com/
+```
+
+Подробные инструкции для Firefox, Chromium-family и `curl`: [`docs/APP_PROXY_GUIDES.md`](docs/APP_PROXY_GUIDES.md).
 ## Разработка и тестирование
 
 Для запуска тестов выполните:

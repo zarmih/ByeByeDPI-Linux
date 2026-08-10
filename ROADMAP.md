@@ -13,7 +13,10 @@ This file is the short project-level roadmap. `docs/ROADMAP.md` is the detailed 
 ## Next safe product work
 - [ ] Signed release tags and packaged binary artifacts.
 - [ ] KDE proxy adapter with the same journal/rollback guarantees as the GNOME adapter.
-- [ ] Per-application setup guides and browser launch helpers.
+- [x] Per-application setup guides and browser launch helpers.
+  - Firefox manual SOCKS5 + proxy DNS guide.
+  - Chromium-family isolated-profile launcher with local-port preflight.
+  - curl `socks5h` example for proxy-side DNS resolution.
 - [ ] Broader distro/Wayland regression testing.
   - [x] CI regression matrix: Ubuntu 22.04 + 24.04 on Python 3.10 + 3.12.
   - [ ] Real Wayland compositor/display smoke test.

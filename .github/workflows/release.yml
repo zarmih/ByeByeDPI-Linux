@@ -191,7 +191,10 @@ jobs:
             -C "$STAGE" \
             -cf - "$TOP" | gzip -n -9 > "$RUNTIME_ARCHIVE"
 
-          sha256sum "$RUNTIME_ARCHIVE" > "$RUNTIME_ARCHIVE.sha256"
+          (
+            cd dist
+            sha256sum "$(basename "$RUNTIME_ARCHIVE")" > "$(basename "$RUNTIME_ARCHIVE").sha256"
+          )
 
           VERIFY="$(mktemp -d)"
           trap 'rm -rf "$STAGE" "$VERIFY"' EXIT

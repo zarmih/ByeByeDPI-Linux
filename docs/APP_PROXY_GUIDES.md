@@ -4,6 +4,18 @@ ByeByeDPI-Linux exposes a local SOCKS5 proxy, normally at `127.0.0.1:1080`. Thes
 
 > ByeDPI is not a VPN. Using the local SOCKS proxy does not hide your public IP address from the destination service.
 
+
+## Desktop integration: GNOME and KDE Plasma
+
+The GUI's **Set system proxy** option now selects a user-level desktop adapter from the active session:
+
+- GNOME uses `gsettings` and the existing crash-recovery journal.
+- KDE Plasma uses KDE's `kreadconfig`/`kwriteconfig` tools against `kioslaverc` and the `[Proxy Settings]` group. The adapter writes a SOCKS endpoint in KDE's native `socks://host port` form, switches `ProxyType` to manual mode, and sends a KConfig notification only after endpoint keys are ready.
+
+The KDE adapter snapshots only the keys it changes (`httpProxy`, `httpsProxy`, `ftpProxy`, `socksProxy`, `ReversedException`, `ProxyType`). On normal stop or crash recovery it restores each original value; keys that did not exist before are deleted again. This intentionally avoids rewriting the whole `kioslaverc` file or touching unrelated KDE settings. No root access, DNS changes, firewall changes, routes, NetworkManager changes, or TUN setup are used.
+
+If a recovery journal exists from the previous desktop adapter, recovery takes priority over the current desktop-session hint so a GNOME↔KDE session switch does not silently strand proxy settings.
+
 ## Firefox
 
 Firefox has its own proxy UI, so no launcher helper is required:

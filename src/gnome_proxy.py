@@ -44,6 +44,8 @@ class GnomeProxyAdapter:
     settings are changed during automated checks.
     """
 
+    integration_name = "GNOME (gsettings)"
+
     def __init__(
         self,
         *,

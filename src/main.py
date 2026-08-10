@@ -14,7 +14,7 @@ from PySide6.QtWidgets import QCheckBox
 from process_manager import ProcessManager
 from diagnostics import DiagnosticsDialog
 from version import __version__
-from gnome_proxy import GnomeProxyAdapter
+from desktop_proxy import select_desktop_proxy
 import settings_schema
 import autostart_manager
 from PySide6.QtWidgets import QFileDialog
@@ -46,7 +46,9 @@ class MainWindow(QMainWindow):
         self.pm.on_output = self._on_process_output
         self.pm.on_stop = self._on_process_stop
 
-        self.gnome_proxy = GnomeProxyAdapter()
+        self.desktop_proxy = select_desktop_proxy()
+        # Compatibility alias for older tests/settings integrations.
+        self.gnome_proxy = self.desktop_proxy
 
         self.append_log_signal.connect(self.append_log)
         self.process_stopped_signal.connect(self.on_process_stopped)
@@ -123,10 +125,11 @@ class MainWindow(QMainWindow):
         layout.addLayout(top_layout)
 
         proxy_layout = QHBoxLayout()
-        self.proxy_checkbox = QCheckBox("Set system proxy via GNOME (gsettings)")
+        proxy_name = getattr(self.gnome_proxy, "integration_name", "desktop")
+        self.proxy_checkbox = QCheckBox(f"Set system proxy via {proxy_name}")
         self.proxy_checkbox.setEnabled(self.gnome_proxy.is_available())
         if not self.gnome_proxy.is_available():
-            self.proxy_checkbox.setToolTip("GNOME gsettings not available")
+            self.proxy_checkbox.setToolTip(f"{proxy_name} proxy integration not available")
         proxy_layout.addWidget(self.proxy_checkbox)
         proxy_layout.addStretch()
         layout.addLayout(proxy_layout)
@@ -223,7 +226,10 @@ class MainWindow(QMainWindow):
         else:
             self.args_input.setText(PROFILES.get(profile, ""))
 
-        proxy_enabled = self.settings.value("gnome_proxy", False, type=bool)
+        if self.settings.contains("desktop_proxy"):
+            proxy_enabled = self.settings.value("desktop_proxy", False, type=bool)
+        else:
+            proxy_enabled = self.settings.value("gnome_proxy", False, type=bool)
         if self.gnome_proxy.is_available():
             self.proxy_checkbox.setChecked(proxy_enabled)
 
@@ -242,7 +248,10 @@ class MainWindow(QMainWindow):
         else:
             self.settings.setValue("custom_args", PROFILES.get(self.profile_combo.currentText(), ""))
 
-        self.settings.setValue("gnome_proxy", self.proxy_checkbox.isChecked())
+        proxy_enabled = self.proxy_checkbox.isChecked()
+        self.settings.setValue("desktop_proxy", proxy_enabled)
+        # Keep the old key for downgrade compatibility with v0.3.0.
+        self.settings.setValue("gnome_proxy", proxy_enabled)
         self.settings.sync()
 
     @staticmethod
@@ -294,8 +303,9 @@ class MainWindow(QMainWindow):
         if not self.gnome_proxy.has_journal():
             return
         if not self.gnome_proxy.recover_if_needed():
+            proxy_name = getattr(self.gnome_proxy, "integration_name", "desktop")
             message = (
-                "A previous GNOME proxy session could not be restored. "
+                f"A previous {proxy_name} proxy session could not be restored. "
                 "The recovery journal was retained.\n\n"
                 + self.gnome_proxy.last_error
             )
@@ -466,7 +476,7 @@ class MainWindow(QMainWindow):
                     self.pm.stop()
                     QMessageBox.critical(
                         self,
-                        "GNOME Proxy Error",
+                        "Desktop Proxy Error",
                         "The SOCKS proxy could not be applied safely. "
                         "ByeDPI was stopped.\n\n" + self.gnome_proxy.last_error,
                     )
@@ -489,7 +499,7 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(
                 self,
                 "Proxy Recovery Failed",
-                "GNOME proxy settings were not fully restored. "
+                "Desktop proxy settings were not fully restored. "
                 "The recovery journal was retained.\n\n"
                 + self.gnome_proxy.last_error,
             )

@@ -76,6 +76,71 @@ jobs:
             exit 1
           fi
 
+  wayland-smoke:
+    name: Wayland / Ubuntu 24.04 / Python 3.12
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-runtime.txt
+
+      - name: Install Wayland and Qt runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            weston \
+            libegl1 \
+            libwayland-client0 \
+            libwayland-cursor0 \
+            libwayland-egl1 \
+            libxkbcommon0
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-runtime.txt
+
+      - name: Run real Wayland compositor smoke tests
+        shell: bash
+        env:
+          PYTHONPATH: ${{ github.workspace }}/src
+          QT_QPA_PLATFORM: wayland
+          WAYLAND_DISPLAY: wayland-byebyedpi
+          PYTEST_CURRENT_TEST: wayland-smoke
+        run: |
+          set -euo pipefail
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/wayland-runtime"
+          export XDG_CONFIG_HOME="$RUNNER_TEMP/xdg-config"
+          export XDG_DATA_HOME="$RUNNER_TEMP/xdg-data"
+          mkdir -p "$XDG_RUNTIME_DIR" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME"
+          chmod 700 "$XDG_RUNTIME_DIR"
+
+          weston \
+            --backend=headless-backend.so \
+            --socket="$WAYLAND_DISPLAY" \
+            --idle-time=0 \
+            --log="$RUNNER_TEMP/weston.log" &
+          WESTON_PID=$!
+          trap 'kill "$WESTON_PID" 2>/dev/null || true; wait "$WESTON_PID" 2>/dev/null || true' EXIT
+
+          for _ in {1..50}; do
+            if [[ -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" ]]; then
+              break
+            fi
+            sleep 0.1
+          done
+          test -S "$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY" || {
+            cat "$RUNNER_TEMP/weston.log"
+            exit 1
+          }
+
+          timeout 15s python tests/smoke_test_real_display.py
+          timeout 15s python tests/smoke_test_updates_real_display.py
+
   source-release:
     name: Reproducible source archive
     runs-on: ubuntu-latest

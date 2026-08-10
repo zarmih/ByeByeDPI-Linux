@@ -2,8 +2,9 @@ import sys
 import os
 import time
 
-# Ensure we don't use offscreen
-if "QT_QPA_PLATFORM" in os.environ:
+# Keep an explicitly selected real backend (for example ``wayland``), but
+# never inherit the dependency-free/offscreen test backend here.
+if os.environ.get("QT_QPA_PLATFORM") == "offscreen":
     del os.environ["QT_QPA_PLATFORM"]
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))

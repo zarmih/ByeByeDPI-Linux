@@ -50,6 +50,7 @@ def make_adapter(tmp: str, runner: FakeKConfigRunner) -> KdeProxyAdapter:
         data_dir=tmp,
         kreadconfig_path="kreadconfig6",
         kwriteconfig_path="kwriteconfig6",
+        notify_supported=True,
     )
 
 
@@ -97,6 +98,19 @@ def main() -> int:
         assert not adapter.apply_proxy(0)
         assert "Invalid" in adapter.last_error
         assert runner.calls == []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runner = FakeKConfigRunner()
+        adapter = KdeProxyAdapter(
+            runner=runner,
+            data_dir=tmp,
+            kreadconfig_path="kreadconfig5",
+            kwriteconfig_path="kwriteconfig5",
+            notify_supported=False,
+        )
+        assert adapter.apply_proxy(1080), adapter.last_error
+        assert not any("--notify" in call for call in runner.calls)
+        assert adapter.restore_proxy(), adapter.last_error
 
     print("KDE proxy adapter smoke test passed")
     return 0

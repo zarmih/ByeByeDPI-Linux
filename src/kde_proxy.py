@@ -59,12 +59,14 @@ class KdeProxyAdapter:
         data_dir: str | os.PathLike[str] | None = None,
         kreadconfig_path: str | None = None,
         kwriteconfig_path: str | None = None,
+        notify_supported: bool | None = None,
     ) -> None:
         self._runner = runner or subprocess.run
         detected_reader, detected_writer = _detect_kconfig_tools()
         self.kreadconfig_path = kreadconfig_path or detected_reader
         self.kwriteconfig_path = kwriteconfig_path or detected_writer
         self.last_error = ""
+        self._notify_supported = notify_supported
 
         if data_dir is not None:
             app_dir = Path(data_dir)
@@ -132,6 +134,26 @@ class KdeProxyAdapter:
     def snapshot_current_state(self) -> dict[str, dict[str, object]]:
         return {key: self._read_key(key) for key in MANAGED_KEYS}
 
+    def _supports_notify(self) -> bool:
+        if self._notify_supported is not None:
+            return self._notify_supported
+        if not self.kwriteconfig_path:
+            self._notify_supported = False
+            return False
+        try:
+            result = self._runner(
+                [self.kwriteconfig_path, "--help"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+        except (OSError, subprocess.SubprocessError):
+            self._notify_supported = False
+            return False
+        help_text = (result.stdout or "") + "\n" + (result.stderr or "")
+        self._notify_supported = result.returncode == 0 and "--notify" in help_text
+        return self._notify_supported
+
     def _write_key(self, key: str, value: str, *, notify: bool = False) -> None:
         if not self.kwriteconfig_path:
             raise KdeProxyIntegrationError("kwriteconfig is unavailable")
@@ -146,7 +168,7 @@ class KdeProxyAdapter:
         ]
         if key == "ReversedException":
             argv.extend(["--type", "bool"])
-        if notify:
+        if notify and self._supports_notify():
             argv.append("--notify")
         argv.append(value)
         self._run(argv)
@@ -164,7 +186,7 @@ class KdeProxyAdapter:
             key,
             "--delete",
         ]
-        if notify:
+        if notify and self._supports_notify():
             argv.append("--notify")
         self._run(argv)
 

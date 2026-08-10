@@ -10,7 +10,7 @@ ByeByeDPI-Linux exposes a local SOCKS5 proxy, normally at `127.0.0.1:1080`. Thes
 The GUI's **Set system proxy** option now selects a user-level desktop adapter from the active session:
 
 - GNOME uses `gsettings` and the existing crash-recovery journal.
-- KDE Plasma uses KDE's `kreadconfig`/`kwriteconfig` tools against `kioslaverc` and the `[Proxy Settings]` group. The adapter writes a SOCKS endpoint in KDE's native `socks://host port` form, switches `ProxyType` to manual mode, and sends a KConfig notification only after endpoint keys are ready.
+- KDE Plasma uses KDE's `kreadconfig`/`kwriteconfig` tools against `kioslaverc` and the `[Proxy Settings]` group. The adapter writes a SOCKS endpoint in KDE's native `socks://host port` form, switches `ProxyType` to manual mode, and sends a KConfig notification only when the installed `kwriteconfig` supports that capability (older KF5 tools do not expose `--notify`).
 
 The KDE adapter snapshots only the keys it changes (`httpProxy`, `httpsProxy`, `ftpProxy`, `socksProxy`, `ReversedException`, `ProxyType`). On normal stop or crash recovery it restores each original value; keys that did not exist before are deleted again. This intentionally avoids rewriting the whole `kioslaverc` file or touching unrelated KDE settings. No root access, DNS changes, firewall changes, routes, NetworkManager changes, or TUN setup are used.
 

@@ -22,6 +22,8 @@ The goal is functional Linux equivalence for the useful desktop workflow, not a 
 - [ ] KDE proxy adapter with the same journal/rollback guarantees.
 - [ ] Per-application setup guides and browser launch helpers.
 - [ ] Broader distro/Wayland regression testing.
+  - [x] CI regression matrix: Ubuntu 22.04 + 24.04 on Python 3.10 + 3.12.
+  - [ ] Real Wayland compositor/display smoke test.
 
 ## Explicitly out of scope for the current safe mode
 

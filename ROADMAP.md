@@ -15,6 +15,8 @@ This file is the short project-level roadmap. `docs/ROADMAP.md` is the detailed 
 - [ ] KDE proxy adapter with the same journal/rollback guarantees as the GNOME adapter.
 - [ ] Per-application setup guides and browser launch helpers.
 - [ ] Broader distro/Wayland regression testing.
+  - [x] CI regression matrix: Ubuntu 22.04 + 24.04 on Python 3.10 + 3.12.
+  - [ ] Real Wayland compositor/display smoke test.
 
 ## Deferred / explicitly out of current safe mode
 - Transparent TUN/VPN routing.
